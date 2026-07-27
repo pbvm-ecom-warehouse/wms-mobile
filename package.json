@@ -5,6 +5,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
+    "android:localhost": "expo start --localhost --android",
+    "start:localhost": "expo start --localhost",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest --runInBand",
@@ -58,3 +60,4 @@
     "node": ">=22.13.0"
   }
 }
+
