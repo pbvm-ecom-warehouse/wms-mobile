@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -17,15 +16,35 @@ import {
   CheckCircle,
   CheckCircle2,
   ImageIcon,
-  Link as LinkIcon,
   X,
 } from 'lucide-react-native';
 import { useAuth } from '@/features/auth/context/auth-context';
+import { ENV } from '@/shared/config/env';
 import { colors } from '@/shared/theme/tokens';
 import { WmsRole } from '@/shared/types/auth';
 import { AppButton, StatusBadge } from '@/shared/ui';
-import { approveGoodsReceiptNote, confirmGoodsReceiptNote, uploadGrnImage } from '../api/grn-api';
+import {
+  approveGoodsReceiptNote,
+  confirmGoodsReceiptNote,
+  getGoodsReceiptNote,
+  uploadGrnImage,
+} from '../api/grn-api';
 import type { GoodsReceiptNote } from '../types/grn';
+
+function resolveImageUrl(uri?: string): string {
+  if (!uri) return '';
+  if (
+    uri.startsWith('http://') ||
+    uri.startsWith('https://') ||
+    uri.startsWith('file://') ||
+    uri.startsWith('data:')
+  ) {
+    return uri;
+  }
+  const baseUrl = ENV.API_URL.replace(/\/api.*$/, '');
+  const cleanPath = uri.startsWith('/') ? uri : `/${uri}`;
+  return `${baseUrl}${cleanPath}`;
+}
 
 const statusBadgeMap: Record<
   string,
@@ -45,22 +64,42 @@ interface GrnDetailModalProps {
 
 export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailModalProps) {
   const { user } = useAuth();
+  const [detailGrn, setDetailGrn] = useState<GoodsReceiptNote | null>(grn);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [approving, setApproving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [imageUrlInput, setImageUrlInput] = useState('');
-  const [showImageInput, setShowImageInput] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  if (!grn) return null;
+  useEffect(() => {
+    if (visible && grn?.id) {
+      setDetailGrn(grn);
+      setLoadingDetail(true);
+      getGoodsReceiptNote(grn.id)
+        .then((fresh) => {
+          if (fresh) setDetailGrn(fresh);
+        })
+        .catch((err) => {
+          console.warn('Lỗi tải chi tiết GRN:', err);
+        })
+        .finally(() => {
+          setLoadingDetail(false);
+        });
+    } else {
+      setDetailGrn(null);
+    }
+  }, [visible, grn?.id]);
+
+  const activeGrn = detailGrn || grn;
+  if (!activeGrn) return null;
 
   const userRole = user?.role?.toUpperCase();
   const canConfirm =
-    grn.status === 'DRAFT' &&
+    activeGrn.status === 'DRAFT' &&
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
 
   const canApprove =
-    grn.status === 'CONFIRMED' &&
+    activeGrn.status === 'CONFIRMED' &&
     (userRole === WmsRole.MANAGER || userRole === WmsRole.ADMIN);
 
   const canUploadImage =
@@ -70,8 +109,9 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
     setConfirming(true);
     setErrorMsg(null);
     try {
-      const updated = await confirmGoodsReceiptNote(grn.id);
+      const updated = await confirmGoodsReceiptNote(activeGrn.id);
       Alert.alert('Thành công', 'Đã xác nhận phiếu nhập kho');
+      setDetailGrn(updated);
       onUpdate(updated);
     } catch (err: any) {
       const msg =
@@ -86,8 +126,9 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
     setApproving(true);
     setErrorMsg(null);
     try {
-      const updated = await approveGoodsReceiptNote(grn.id);
+      const updated = await approveGoodsReceiptNote(activeGrn.id);
       Alert.alert('Thành công', 'Đã duyệt phiếu nhập kho (Audit)');
+      setDetailGrn(updated);
       onUpdate(updated);
     } catch (err: any) {
       const msg =
@@ -102,10 +143,9 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
     setUploadingImage(true);
     setErrorMsg(null);
     try {
-      const updated = await uploadGrnImage(grn.id, uri);
+      const updated = await uploadGrnImage(activeGrn.id, uri);
       Alert.alert('Thành công', 'Đã tải ảnh minh chứng nhập kho lên hệ thống');
-      setImageUrlInput('');
-      setShowImageInput(false);
+      setDetailGrn(updated);
       onUpdate(updated);
     } catch (err: any) {
       const msg =
@@ -164,16 +204,8 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
     }
   };
 
-  const handleUploadImage = async () => {
-    if (!imageUrlInput.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập đường dẫn/URI hình ảnh');
-      return;
-    }
-    await handleUploadImageUri(imageUrlInput);
-  };
-
-  const badgeConfig = statusBadgeMap[grn.status] || {
-    label: grn.status,
+  const badgeConfig = statusBadgeMap[activeGrn.status] || {
+    label: activeGrn.status,
     variant: 'neutral',
   };
 
@@ -185,12 +217,12 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
           <View>
             <View style={styles.headerTitleRow}>
               <Text style={styles.titleText}>
-                {grn.grnNumber || `GRN #${grn.id.substring(0, 8)}`}
+                {activeGrn.grnNumber || `GRN #${activeGrn.id.substring(0, 8)}`}
               </Text>
               <StatusBadge {...badgeConfig} />
             </View>
             <Text style={styles.subtitleText}>
-              Tạo lúc: {new Date(grn.createdAt).toLocaleString('vi-VN')}
+              Tạo lúc: {activeGrn.createdAt ? new Date(activeGrn.createdAt).toLocaleString('vi-VN') : ''}
             </Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -213,19 +245,19 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
             <View style={styles.infoRow}>
               <Text style={styles.metaLabel}>Mã PO liên quan</Text>
               <Text style={styles.poNumberValue}>
-                {grn.purchaseOrderNumber || grn.purchaseOrderId || 'N/A'}
+                {activeGrn.purchaseOrderNumber || activeGrn.purchaseOrderId || 'N/A'}
               </Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.metaLabel}>Nhà cung cấp</Text>
               <Text style={styles.metaValueBold}>
-                {grn.supplierName || 'Chưa thông tin'}
+                {activeGrn.supplierName || 'Chưa thông tin'}
               </Text>
             </View>
             <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
               <Text style={styles.metaLabel}>Tổng số mặt hàng</Text>
               <Text style={styles.metaValueBold}>
-                {grn.items?.length || 0} mặt hàng
+                {activeGrn.items?.length || 0} mặt hàng
               </Text>
             </View>
           </View>
@@ -236,8 +268,8 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
               Danh sách sản phẩm nhập kho
             </Text>
 
-            {grn.items && grn.items.length > 0 ? (
-              grn.items.map((item, idx) => (
+            {activeGrn.items && activeGrn.items.length > 0 ? (
+              activeGrn.items.map((item, idx) => (
                 <View
                   key={item.itemId || idx}
                   style={styles.itemRowCard}
@@ -285,7 +317,7 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
           <View style={styles.card}>
             <View style={styles.rowBetween}>
               <Text style={styles.cardHeader}>
-                Ảnh minh chứng nhập kho ({grn.images?.length || 0})
+                Ảnh minh chứng nhập kho ({activeGrn.images?.length || 0})
               </Text>
             </View>
 
@@ -308,15 +340,6 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
                   <ImageIcon size={15} color="#0878f9" />
                   <Text style={styles.secondaryActionText}>Thư viện</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => setShowImageInput(!showImageInput)}
-                  disabled={uploadingImage}
-                  style={styles.urlActionBtn}
-                >
-                  <LinkIcon size={14} color="#6c7078" />
-                  <Text style={styles.urlActionText}>URL</Text>
-                </TouchableOpacity>
               </View>
             ) : null}
 
@@ -327,42 +350,15 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
               </View>
             ) : null}
 
-            {showImageInput ? (
-              <View style={styles.urlInputCard}>
-                <Text style={styles.metaLabel}>
-                  Đường dẫn / URI ảnh minh chứng:
-                </Text>
-                <TextInput
-                  style={styles.urlInput}
-                  value={imageUrlInput}
-                  onChangeText={setImageUrlInput}
-                  placeholder="https://... hoặc file URI"
-                />
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
-                  <TouchableOpacity
-                    onPress={() => setShowImageInput(false)}
-                    style={styles.cancelBtn}
-                  >
-                    <Text style={styles.cancelBtnText}>Hủy</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleUploadImage}
-                    disabled={uploadingImage}
-                    style={styles.uploadSubmitBtn}
-                  >
-                    <Text style={styles.uploadSubmitText}>
-                      {uploadingImage ? 'Đang tải...' : 'Upload'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null}
-
-            {grn.images && grn.images.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-                {grn.images.map((img, index) => (
+            {activeGrn.images && activeGrn.images.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingTop: 8 }}>
+                {activeGrn.images.map((img, index) => (
                   <View key={index} style={styles.imageThumbnail}>
-                    <Image source={{ uri: img }} style={{ width: 100, height: 100 }} />
+                    <Image
+                      source={{ uri: resolveImageUrl(img) }}
+                      style={{ width: 100, height: 100, borderRadius: 8 }}
+                      resizeMode="cover"
+                    />
                   </View>
                 ))}
               </ScrollView>

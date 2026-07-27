@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Platform,
   ScrollView,
@@ -11,13 +12,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ArrowLeft,
   Calendar,
+  Camera,
   CheckCircle2,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  ImageIcon,
   Package,
   RefreshCw,
   Search,
@@ -26,7 +30,7 @@ import {
 } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
 import { AppButton, StatusBadge } from '@/shared/ui';
-import { createGoodsReceiptNote, listPurchaseOrdersForReceiving } from '../api/grn-api';
+import { createGoodsReceiptNote, listPurchaseOrdersForReceiving, uploadGrnImage } from '../api/grn-api';
 import type { GoodsReceiptNote, PurchaseOrderSummary } from '../types/grn';
 
 interface CreateGrnModalProps {
@@ -57,12 +61,65 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeDatePickerIndex, setActiveDatePickerIndex] = useState<number | null>(null);
+  const [evidenceImages, setEvidenceImages] = useState<string[]>([]);
 
   const handleSelectDate = (dateStr: string) => {
     if (activeDatePickerIndex !== null) {
       handleItemChange(activeDatePickerIndex, 'expiryDate', dateStr);
     }
     setActiveDatePickerIndex(null);
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Cần cấp quyền',
+          'Ứng dụng cần quyền truy cập máy ảnh để chụp ảnh minh chứng.',
+        );
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setEvidenceImages((prev) => [...prev, result.assets[0].uri]);
+      }
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể mở máy ảnh');
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Cần cấp quyền',
+          'Ứng dụng cần quyền truy cập thư viện ảnh.',
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: 5,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uris = result.assets.map((asset) => asset.uri);
+        setEvidenceImages((prev) => [...prev, ...uris]);
+      }
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể mở thư viện ảnh');
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setEvidenceImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   useEffect(() => {
@@ -73,6 +130,7 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
       setErrorMsg(null);
       setSearchPo('');
       setActiveDatePickerIndex(null);
+      setEvidenceImages([]);
     }
   }, [visible]);
 
@@ -161,7 +219,23 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
           note: item.note?.trim() || undefined,
         })),
       });
-      Alert.alert('Thành công', `Đã tạo phiếu nhập kho ${grn.grnNumber || ''}`);
+
+      if (evidenceImages.length > 0) {
+        for (const uri of evidenceImages) {
+          try {
+            await uploadGrnImage(grn.id, uri);
+          } catch (uploadErr) {
+            console.warn('Lỗi tải ảnh:', uploadErr);
+          }
+        }
+      }
+
+      Alert.alert(
+        'Thành công',
+        `Đã tạo phiếu nhập kho ${grn.grnNumber || ''}${
+          evidenceImages.length > 0 ? ` (kèm ${evidenceImages.length} ảnh minh chứng)` : ''
+        }`,
+      );
       onSuccess(grn);
       onClose();
     } catch (err: any) {
@@ -459,6 +533,79 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                 </View>
               ))}
 
+              {/* Evidence Images Section */}
+              <View style={[styles.card, { marginTop: 12 }]}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.cardHeader}>
+                    Ảnh minh chứng nhập kho ({evidenceImages.length})
+                  </Text>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 8 }}>
+                  <TouchableOpacity
+                    onPress={handleTakePhoto}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      backgroundColor: '#0878f9',
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
+                      borderRadius: 10,
+                    }}
+                  >
+                    <Camera size={16} color="#ffffff" />
+                    <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>Chụp ảnh trực tiếp</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handlePickImage}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      backgroundColor: '#f5f6f8',
+                      borderWidth: 1,
+                      borderColor: '#e4e5e9',
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
+                      borderRadius: 10,
+                    }}
+                  >
+                    <ImageIcon size={16} color="#0878f9" />
+                    <Text style={{ color: '#101114', fontWeight: '500', fontSize: 13 }}>Thư viện ảnh</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {evidenceImages.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingTop: 6 }}>
+                    {evidenceImages.map((uri, idx) => (
+                      <View key={idx} style={{ position: 'relative', marginRight: 12, marginTop: 4 }}>
+                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 10 }} />
+                        <TouchableOpacity
+                          onPress={() => handleRemoveImage(idx)}
+                          style={{
+                            position: 'absolute',
+                            top: -6,
+                            right: -6,
+                            backgroundColor: '#ef4444',
+                            borderRadius: 12,
+                            padding: 3,
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <X size={12} color="#ffffff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <Text style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic', marginTop: 4 }}>
+                    Chưa chụp/chọn ảnh minh chứng nào. Bấm nút phía trên để chụp hoặc tải ảnh hàng hóa.
+                  </Text>
+                )}
+              </View>
+
               {/* Submit Section */}
               <View style={{ marginTop: 16, marginBottom: 32 }}>
                 <View style={styles.totalRow}>
@@ -704,6 +851,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e4e5e9',
+  },
+  cardHeader: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#101114',
   },
   sectionTitle: {
     fontSize: 14,
