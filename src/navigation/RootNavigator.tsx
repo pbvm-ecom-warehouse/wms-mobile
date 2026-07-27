@@ -19,8 +19,8 @@ export const RootNavigator: React.FC = () => {
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-slate-950 items-center justify-center">
-        <ActivityIndicator size="large" color="#0284c7" />
+      <View className="flex-1 bg-slate-50 items-center justify-center">
+        <ActivityIndicator size="large" color="#007AFF" />
       </View>
     );
   }

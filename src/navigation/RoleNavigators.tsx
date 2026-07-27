@@ -14,17 +14,18 @@ import { ShippingListScreen } from '../screens/shipping/ShippingListScreen';
 const Tab = createBottomTabNavigator();
 
 const commonScreenOptions = {
-  headerStyle: { backgroundColor: '#0f172a', elevation: 0, shadowOpacity: 0 },
-  headerTitleStyle: { color: '#ffffff', fontWeight: 'bold' as const },
+  headerStyle: { backgroundColor: '#ffffff', elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  headerTitleStyle: { color: '#0f172a', fontWeight: '700' as const, fontSize: 18 },
   tabBarStyle: {
-    backgroundColor: '#090d16',
-    borderTopColor: '#1e293b',
+    backgroundColor: '#ffffff',
+    borderTopColor: '#e2e8f0',
+    borderTopWidth: 1,
     paddingBottom: 6,
     paddingTop: 6,
     height: 60,
   },
-  tabBarActiveTintColor: '#38bdf8',
-  tabBarInactiveTintColor: '#64748b',
+  tabBarActiveTintColor: '#007AFF',
+  tabBarInactiveTintColor: '#8e8e93',
 };
 
 // 1. Admin & Manager Navigator

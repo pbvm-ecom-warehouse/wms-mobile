@@ -38,50 +38,50 @@ export const LoginScreen: React.FC = () => {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      className="flex-1 bg-slate-950"
+      className="flex-1 bg-slate-50"
     >
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} className="px-6 py-10">
         {/* Brand Header */}
         <View className="items-center mb-8">
-          <View className="w-20 h-20 bg-sky-500/10 rounded-3xl items-center justify-center border border-sky-500/30 mb-4 shadow-lg">
-            <Package size={42} color="#0284c7" />
+          <View className="w-22 h-22 bg-blue-50 rounded-3xl items-center justify-center border border-blue-100 mb-4 shadow-sm p-4">
+            <Package size={44} color="#007AFF" />
           </View>
-          <Text className="text-3xl font-bold text-white tracking-wider">WMS MOBILE</Text>
-          <Text className="text-slate-400 text-sm mt-1">Hệ thống Quản lý Kho & Chuỗi Cung Ứng</Text>
+          <Text className="text-3xl font-extrabold text-slate-900 tracking-tight">StockMate</Text>
+          <Text className="text-slate-500 text-sm mt-1 font-medium">Hệ thống Quản lý Kho & Chuỗi Cung Ứng</Text>
         </View>
 
         {/* Card Form */}
-        <View className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
-          <Text className="text-xl font-bold text-white mb-6 text-center">Đăng Nhập Hệ Thống</Text>
+        <View className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xl shadow-slate-200/60">
+          <Text className="text-xl font-bold text-slate-900 mb-6 text-center">Đăng Nhập Hệ Thống</Text>
 
           {/* Username Input */}
           <View className="mb-4">
-            <Text className="text-slate-300 text-xs font-semibold uppercase mb-2">Tên đăng nhập / Email</Text>
-            <View className="flex-row items-center bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3">
-              <UserIcon size={20} color="#94a3b8" />
+            <Text className="text-slate-600 text-xs font-semibold uppercase mb-2 ml-1">Tên đăng nhập / Email</Text>
+            <View className="flex-row items-center bg-slate-100/80 border border-slate-200 rounded-2xl px-4 py-3.5">
+              <UserIcon size={20} color="#64748b" />
               <TextInput
                 value={username}
                 onChangeText={setUsername}
                 placeholder="Nhập tên đăng nhập"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 autoCapitalize="none"
-                className="flex-1 text-white ml-3 text-base"
+                className="flex-1 text-slate-900 ml-3 text-base font-medium"
               />
             </View>
           </View>
 
           {/* Password Input */}
           <View className="mb-6">
-            <Text className="text-slate-300 text-xs font-semibold uppercase mb-2">Mật khẩu</Text>
-            <View className="flex-row items-center bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3">
-              <Lock size={20} color="#94a3b8" />
+            <Text className="text-slate-600 text-xs font-semibold uppercase mb-2 ml-1">Mật khẩu</Text>
+            <View className="flex-row items-center bg-slate-100/80 border border-slate-200 rounded-2xl px-4 py-3.5">
+              <Lock size={20} color="#64748b" />
               <TextInput
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Nhập mật khẩu"
-                placeholderTextColor="#64748b"
+                placeholderTextColor="#94a3b8"
                 secureTextEntry
-                className="flex-1 text-white ml-3 text-base"
+                className="flex-1 text-slate-900 ml-3 text-base font-medium"
               />
             </View>
           </View>
@@ -91,13 +91,13 @@ export const LoginScreen: React.FC = () => {
             onPress={handleLogin}
             disabled={isLoading}
             activeOpacity={0.8}
-            className="bg-sky-600 active:bg-sky-700 py-4 rounded-2xl flex-row items-center justify-center shadow-lg shadow-sky-600/30"
+            className="bg-blue-600 active:bg-blue-700 py-4 rounded-2xl flex-row items-center justify-center shadow-lg shadow-blue-500/25"
           >
             {isLoading ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
               <>
-                <LogIn size={20} color="#ffffff" className="mr-2" />
+                <LogIn size={20} color="#ffffff" />
                 <Text className="text-white font-bold text-base ml-2">ĐĂNG NHẬP HỆ THỐNG</Text>
               </>
             )}
@@ -106,8 +106,8 @@ export const LoginScreen: React.FC = () => {
 
         {/* Footer */}
         <View className="mt-8 items-center">
-          <Text className="text-slate-500 text-xs text-center">
-            API Deployed: https://api-ecom-wms.hoaiphuong.io.vn/api/wms
+          <Text className="text-slate-400 text-xs text-center font-medium">
+            StockMate v1.0.0 • Connected to Live WMS API
           </Text>
         </View>
       </ScrollView>
