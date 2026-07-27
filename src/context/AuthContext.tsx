@@ -8,7 +8,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  switchMockRole: (role: WmsRole) => Promise<void>;
+  refreshUser: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -36,8 +36,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else if (savedUser) {
             setUser(savedUser);
           }
-        } catch {
-          if (savedUser) {
+        } catch (err: any) {
+          if (err?.response?.status === 401) {
+            await Storage.clearAll();
+            setUser(null);
+          } else if (savedUser) {
             setUser(savedUser);
           }
         }
@@ -49,10 +52,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const refreshUser = async (): Promise<User | null> => {
+    try {
+      const freshUser = await authApi.me();
+      if (freshUser) {
+        setUser(freshUser);
+        await Storage.saveUser(freshUser);
+        return freshUser;
+      }
+    } catch (err: any) {
+      if (err?.response?.status === 401) {
+        await Storage.clearAll();
+        setUser(null);
+      }
+    }
+    return user;
+  };
+
   const login = async (username: string, password: string) => {
     setIsLoading(true);
     try {
-      // 100% Direct Live Deployed API Connection (No mock fallback)
       const tokens = await authApi.login(username, password);
       await Storage.saveTokens(tokens.accessToken, tokens.refreshToken);
       
@@ -60,7 +79,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(userProfile);
       await Storage.saveUser(userProfile);
     } catch (err: any) {
-      // Clear any previous token or stale session on login failure
       await Storage.clearAll();
       setUser(null);
       throw err;
@@ -83,15 +101,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const switchMockRole = async (newRole: WmsRole) => {
-    if (!user) return;
-    const updatedUser: User = { ...user, role: newRole };
-    setUser(updatedUser);
-    await Storage.saveUser(updatedUser);
-  };
-
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, switchMockRole }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

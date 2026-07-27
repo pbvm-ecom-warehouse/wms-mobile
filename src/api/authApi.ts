@@ -12,6 +12,32 @@ export const authApi = {
     return unwrapData<User>(res.data);
   },
 
+  async uploadAvatar(imageUri: string): Promise<User> {
+    const filename = imageUri.split('/').pop() || 'avatar.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri: imageUri,
+      name: filename,
+      type: type,
+    } as any);
+
+    const res = await apiClient.post('/auth/me/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return unwrapData<User>(res.data);
+  },
+
+  async changePassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; mustChangePassword: boolean }> {
+    const res = await apiClient.post('/auth/change-password', { oldPassword, newPassword });
+    return unwrapData<{ success: boolean; mustChangePassword: boolean }>(res.data);
+  },
+
   async logout(refreshToken?: string): Promise<{ success: boolean }> {
     try {
       const res = await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : {});

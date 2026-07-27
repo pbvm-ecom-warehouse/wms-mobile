@@ -11,11 +11,16 @@ export enum WmsRole {
 export interface User {
   id: string;
   username: string;
-  email: string;
-  name: string;
-  role: WmsRole;
+  email?: string;
+  name?: string;
+  role: WmsRole | string;
   avatar?: string;
+  avatarUrl?: string;
   phone?: string;
+  status?: 'ACTIVE' | 'LOCKED' | string;
+  mustChangePassword?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AuthTokens {
