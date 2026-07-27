@@ -1,40 +1,91 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Package } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
 import { AppHeader, EmptyState, ListRow, Screen, SearchField, Surface } from '@/shared/ui';
-import { products } from '../data/mock-products';
+import { listProducts, type WarehouseItem } from '../api/products-api';
 
 export function ProductsScreen() {
+  const [items, setItems] = useState<WarehouseItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+
+  const fetchItems = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const data = await listProducts();
+      setItems(data);
+    } catch {
+      setItems([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
   const query = search.trim().toLowerCase();
-  const filtered = products.filter(
-    (item) => item.name.toLowerCase().includes(query) || item.sku.toLowerCase().includes(query),
+  const filtered = items.filter(
+    (item) => item.name?.toLowerCase().includes(query) || item.sku?.toLowerCase().includes(query),
   );
 
   return (
     <Screen withTabBar>
-      <AppHeader title="Sản phẩm" subtitle="Tra cứu tồn kho và vị trí" />
+      <AppHeader
+        title="Sản phẩm"
+        subtitle={loading ? 'Đang tải dữ liệu...' : `${items.length} mặt hàng kho`}
+      />
       <SearchField value={search} onChangeText={setSearch} placeholder="Tên hoặc SKU" />
-      <Surface className="mt-4">
-        {filtered.length ? (
-          filtered.map((item) => (
-            <ListRow
-              key={item.id}
-              icon={<Package size={19} color={colors.primary} />}
-              title={item.name}
-              subtitle={`${item.sku} · ${item.location}`}
-              meta={`${item.available.toLocaleString('vi-VN')} ${item.unit}`}
-            />
-          ))
+      <ScrollView
+        className="flex-1 mt-4"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchItems(true)}
+            colors={[colors.primary]}
+          />
+        }
+      >
+        {loading && !refreshing ? (
+          <View className="py-12 items-center">
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text className="text-xs text-[#6c7078] mt-3">Đang tải danh sách sản phẩm...</Text>
+          </View>
+        ) : filtered.length ? (
+          <Surface>
+            {filtered.map((item) => {
+              const qty = item.availableQty ?? item.quantityOnHand ?? 0;
+              return (
+                <ListRow
+                  key={item.id}
+                  icon={<Package size={19} color={colors.primary} />}
+                  title={item.name || item.sku}
+                  subtitle={`${item.sku} · ${item.location || 'Kho chính'}`}
+                  meta={`${qty.toLocaleString('vi-VN')} ${item.unit || 'Cái'}`}
+                />
+              );
+            })}
+          </Surface>
         ) : (
           <EmptyState
             title="Không tìm thấy sản phẩm"
-            description="Thử tìm bằng tên hoặc mã SKU khác."
-            actionLabel="Xóa tìm kiếm"
-            onAction={() => setSearch('')}
+            description={
+              search
+                ? 'Thử tìm bằng tên hoặc mã SKU khác.'
+                : 'Hiện chưa có mặt hàng kho nào trong hệ thống.'
+            }
+            actionLabel={search ? 'Xóa tìm kiếm' : 'Tải lại'}
+            onAction={search ? () => setSearch('') : () => fetchItems()}
           />
         )}
-      </Surface>
+      </ScrollView>
     </Screen>
   );
 }
+

@@ -9,6 +9,7 @@ interface AppButtonProps {
   variant?: 'primary' | 'secondary' | 'danger';
   disabled?: boolean;
   loading?: boolean;
+  icon?: React.ReactNode;
 }
 
 export function AppButton({
@@ -17,6 +18,7 @@ export function AppButton({
   variant = 'primary',
   disabled = false,
   loading = false,
+  icon,
 }: AppButtonProps) {
   const isDisabled = disabled || loading;
 
@@ -35,7 +37,11 @@ export function AppButton({
         isDisabled && 'opacity-50',
       )}
     >
-      {loading ? <ActivityIndicator color={colors.surface} className="mr-2" /> : null}
+      {loading ? (
+        <ActivityIndicator color={colors.surface} className="mr-2" />
+      ) : icon ? (
+        <React.Fragment>{icon}<Text className="w-2" /></React.Fragment>
+      ) : null}
       <Text
         className={clsx(
           'text-sm font-semibold',

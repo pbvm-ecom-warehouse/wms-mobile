@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Text, Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -15,12 +15,12 @@ import {
   UserRound,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { inboundReceipts } from '@/features/inbound/data/mock-inbound';
-import { outboundOrders } from '@/features/outbound/data/mock-outbound';
-import { products } from '@/features/products/data/mock-products';
-import { printJobs } from '@/features/printing/data/mock-printing';
-import { deliveries } from '@/features/shipping/data/mock-shipping';
 import { useAuth } from '@/features/auth/context/auth-context';
+import { listGoodsReceiptNotes } from '@/features/inbound/api/grn-api';
+import { listGoodsIssues } from '@/features/outbound/api/outbound-api';
+import { listProducts } from '@/features/products/api/products-api';
+import { listPrintJobs } from '@/features/printing/api/printing-api';
+import { listShipments } from '@/features/shipping/api/shipping-api';
 import { colors } from '@/shared/theme/tokens';
 import { IconButton, ListRow, Screen, Surface } from '@/shared/ui';
 
@@ -30,7 +30,42 @@ export function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>('Hôm nay');
-  const totalStock = products.reduce((sum, product) => sum + product.available, 0);
+
+  const [stockTotal, setStockTotal] = useState<number>(0);
+  const [grnCount, setGrnCount] = useState<number>(0);
+  const [issueCount, setIssueCount] = useState<number>(0);
+  const [printCount, setPrintCount] = useState<number>(0);
+  const [shipCount, setShipCount] = useState<number>(0);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const [prods, grns, issues, prints, ships] = await Promise.allSettled([
+        listProducts(),
+        listGoodsReceiptNotes({ status: 'ALL' }),
+        listGoodsIssues(),
+        listPrintJobs(),
+        listShipments(),
+      ]);
+
+      if (prods.status === 'fulfilled') {
+        const sum = prods.value.reduce(
+          (acc, item) => acc + (item.availableQty ?? item.quantityOnHand ?? 0),
+          0,
+        );
+        setStockTotal(sum);
+      }
+      if (grns.status === 'fulfilled') setGrnCount(grns.value.length);
+      if (issues.status === 'fulfilled') setIssueCount(issues.value.length);
+      if (prints.status === 'fulfilled') setPrintCount(prints.value.length);
+      if (ships.status === 'fulfilled') setShipCount(ships.value.length);
+    } catch {
+      // keep fallback 0
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   return (
     <Screen withTabBar>
@@ -84,24 +119,26 @@ export function DashboardScreen() {
           <CircleHelp size={13} color={colors.textMuted} />
         </View>
         <Text className="mt-2 text-[36px] font-medium tracking-[-1.5px] text-ink">
-          {totalStock.toLocaleString('vi-VN')}
+          {stockTotal.toLocaleString('vi-VN')}
         </Text>
         <Text className="mt-1 text-xs text-muted">đơn vị hàng hóa</Text>
       </View>
 
       <View className="mb-4 flex-row gap-3">
-        <Surface className="min-h-[146px] flex-1 justify-between">
-          <View className="flex-row justify-between">
-            <Text className="text-[11px] text-muted">Tác vụ nhanh</Text>
-            <QrCode size={18} color={colors.textMuted} />
-          </View>
-          <View>
-            <View className="mb-3 h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft">
-              <ArrowDownLeft size={24} color={colors.primary} />
+        <Pressable onPress={() => router.push('/inbound')} className="flex-1">
+          <Surface className="min-h-[146px] flex-1 justify-between">
+            <View className="flex-row justify-between">
+              <Text className="text-[11px] text-muted">Tác vụ nhanh</Text>
+              <QrCode size={18} color={colors.textMuted} />
             </View>
-            <Text className="text-base font-semibold leading-5 text-ink">Phiếu nhập{'\n'}sắp xử lý</Text>
-          </View>
-        </Surface>
+            <View>
+              <View className="mb-3 h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft">
+                <ArrowDownLeft size={24} color={colors.primary} />
+              </View>
+              <Text className="text-base font-semibold leading-5 text-ink">Phiếu nhập{'\n'}kho</Text>
+            </View>
+          </Surface>
+        </Pressable>
         <Surface className="min-h-[146px] flex-1 justify-between">
           <View className="flex-row justify-between">
             <Text className="text-[11px] text-muted">Hướng dẫn</Text>
@@ -123,19 +160,27 @@ export function DashboardScreen() {
         <View className="ml-3 flex-1">
           <Text className="text-sm font-semibold text-ink">Sắp tới</Text>
           <Text className="mt-0.5 text-xs text-muted">
-            {inboundReceipts.filter((item) => item.status !== 'COMPLETED').length} phiếu nhập đang chờ
+            {grnCount} phiếu nhập đang trong hệ thống
           </Text>
         </View>
       </Surface>
 
       <Text className="mb-3 px-1 text-xl font-semibold tracking-[-0.4px] text-ink">
-        Hoạt động hôm nay
+        Hoạt động hệ thống
       </Text>
       <Surface>
-        <ListRow icon={<ArrowDownLeft size={19} color={colors.primary} />} title="Phiếu nhập kho" subtitle="Đang xử lý và chờ tiếp nhận" meta={`${inboundReceipts.length} đơn`} />
-        <ListRow icon={<Printer size={19} color={colors.primary} />} title="Đơn in ly" subtitle="Theo dõi tiến độ in" meta={`${printJobs.length} đơn`} />
-        <ListRow icon={<Truck size={19} color={colors.primary} />} title="Vận đơn giao hàng" subtitle="Sẵn sàng và đang giao" meta={`${deliveries.length} đơn`} />
-        <ListRow icon={<ArrowUpRight size={19} color={colors.primary} />} title="Phiếu xuất kho" subtitle="Đang chờ và đang soạn" meta={`${outboundOrders.length} đơn`} />
+        <Pressable onPress={() => router.push('/inbound')}>
+          <ListRow icon={<ArrowDownLeft size={19} color={colors.primary} />} title="Phiếu nhập kho" subtitle="Đang xử lý và chờ tiếp nhận" meta={`${grnCount} đơn`} />
+        </Pressable>
+        <Pressable onPress={() => router.push('/printing')}>
+          <ListRow icon={<Printer size={19} color={colors.primary} />} title="Đơn in ly" subtitle="Theo dõi tiến độ in" meta={`${printCount} đơn`} />
+        </Pressable>
+        <Pressable onPress={() => router.push('/shipping')}>
+          <ListRow icon={<Truck size={19} color={colors.primary} />} title="Vận đơn giao hàng" subtitle="Sẵn sàng và đang giao" meta={`${shipCount} đơn`} />
+        </Pressable>
+        <Pressable onPress={() => router.push('/outbound')}>
+          <ListRow icon={<ArrowUpRight size={19} color={colors.primary} />} title="Phiếu xuất kho" subtitle="Đang chờ và đang soạn" meta={`${issueCount} đơn`} />
+        </Pressable>
       </Surface>
 
       <View className="mt-5 flex-row items-center justify-center gap-1">
@@ -147,3 +192,4 @@ export function DashboardScreen() {
     </Screen>
   );
 }
+
