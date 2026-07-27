@@ -1,28 +1,27 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  // NOTE: Update this to include the paths to all of your component files.
-  content: [
-    "./App.{js,jsx,ts,tsx}",
-    "./src/**/*.{js,jsx,ts,tsx}"
-  ],
-  presets: [require("nativewind/preset")],
+  content: ['./src/**/*.{js,jsx,ts,tsx}'],
+  presets: [require('nativewind/preset')],
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          500: '#0284c7',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-        },
-        slate: {
-          850: '#151e2e',
-          950: '#0b0f19',
-        }
+        background: '#ececf1',
+        surface: '#ffffff',
+        'surface-muted': '#f5f6f8',
+        primary: '#0878f9',
+        'primary-soft': '#eaf3ff',
+        ink: '#101114',
+        muted: '#6c7078',
+        border: '#e4e5e9',
+        success: '#16875f',
+        'success-soft': '#e7f7f0',
+        warning: '#a66300',
+        'warning-soft': '#fff4dc',
+        danger: '#c83a3a',
+        'danger-soft': '#ffebeb',
+      },
+      borderRadius: {
+        card: '24px',
       },
     },
   },
