@@ -8,15 +8,17 @@ export type AppTab =
   | 'printing'
   | 'inventory'
   | 'shipping'
+  | 'scrap'
+  | 'putaway'
   | 'profile';
 
 const ROLE_TABS: Readonly<Record<WmsRole, readonly AppTab[]>> = {
-  [WmsRole.ADMIN]: ['dashboard', 'products', 'inbound', 'outbound', 'profile'],
-  [WmsRole.MANAGER]: ['dashboard', 'products', 'inbound', 'outbound', 'profile'],
-  [WmsRole.RECEIVER]: ['inbound', 'products', 'profile'],
+  [WmsRole.ADMIN]: ['dashboard', 'products', 'inbound', 'putaway', 'scrap', 'outbound', 'inventory', 'profile'],
+  [WmsRole.MANAGER]: ['dashboard', 'products', 'inbound', 'putaway', 'scrap', 'outbound', 'inventory', 'profile'],
+  [WmsRole.RECEIVER]: ['inbound', 'putaway', 'scrap', 'products', 'profile'],
   [WmsRole.PICKER]: ['outbound', 'products', 'profile'],
   [WmsRole.PRINTER]: ['printing', 'products', 'profile'],
-  [WmsRole.COUNTER]: ['inventory', 'products', 'profile'],
+  [WmsRole.COUNTER]: ['inventory', 'products', 'scrap', 'profile'],
   [WmsRole.SHIPPER]: ['shipping', 'profile'],
 };
 
