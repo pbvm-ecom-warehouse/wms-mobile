@@ -1,4 +1,3 @@
 /// <reference types="expo/types" />
-/// <reference types="nativewind/types" />
 
-declare module '*.css';
+// NOTE: This file should not be edited and should be in your git ignore

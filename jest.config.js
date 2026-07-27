@@ -9,6 +9,6 @@ module.exports = {
     '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|expo-modules-core|@expo/.*|@react-navigation/.*|react-navigation|react-native-svg|lucide-react-native|nativewind|react-native-css-interop)/)',
+    'node_modules/(?!(\\.pnpm|((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|expo-modules-core|@expo/.*|@react-navigation/.*|react-navigation|react-native-svg|lucide-react-native|nativewind|react-native-css-interop)))',
   ],
 };

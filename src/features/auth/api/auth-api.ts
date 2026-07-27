@@ -17,4 +17,11 @@ export const authApi = {
       // Local logout must still succeed when the server is unavailable.
     }
   },
+  async changePassword(oldPassword: string, newPassword: string): Promise<{ success: boolean }> {
+    const response = await apiClient.post('/auth/change-password', {
+      oldPassword,
+      newPassword,
+    });
+    return unwrapData<{ success: boolean }>(response.data);
+  },
 };

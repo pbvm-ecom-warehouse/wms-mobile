@@ -1,16 +1,19 @@
 import React from 'react';
-import { Mail, Phone, ShieldCheck, UserRound } from 'lucide-react-native';
 import { Text, View } from 'react-native';
+import { KeyRound, Mail, Phone, ShieldCheck, UserRound } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/features/auth/context/auth-context';
 import { colors } from '@/shared/theme/tokens';
 import { AppButton, AppHeader, ListRow, Screen, StatusBadge, Surface } from '@/shared/ui';
 
 export function ProfileScreen() {
-  const { user, logout, isLoading } = useAuth();
+  const router = useRouter();
+  const { user, logout, isLoading: isAuthLoading } = useAuth();
 
   return (
     <Screen withTabBar>
       <AppHeader title="Tài khoản" subtitle="Thông tin và quyền truy cập" />
+
       <Surface className="mb-4 items-center py-6">
         <View className="mb-3 h-20 w-20 items-center justify-center rounded-full bg-primary-soft">
           <UserRound size={34} color={colors.primary} />
@@ -38,12 +41,18 @@ export function ProfileScreen() {
           title="Bộ phận"
           subtitle="Vận hành kho WMS"
         />
+        <ListRow
+          icon={<KeyRound size={18} color={colors.primary} />}
+          title="Đổi mật khẩu"
+          subtitle="Thay đổi mật khẩu tài khoản"
+          onPress={() => router.push('/change-password')}
+        />
       </Surface>
 
       <AppButton
         label="Đăng xuất"
         variant="danger"
-        loading={isLoading}
+        loading={isAuthLoading}
         onPress={logout}
       />
     </Screen>

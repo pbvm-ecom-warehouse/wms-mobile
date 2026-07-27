@@ -44,7 +44,7 @@ export function DashboardScreen() {
           <View className="h-9 w-9 items-center justify-center rounded-2xl bg-primary-soft">
             <Box size={22} color={colors.primary} strokeWidth={2.3} />
           </View>
-          <Text className="mt-1 text-[10px] font-semibold text-muted">PBVM WMS</Text>
+          <Text className="mt-1 text-[10px] font-semibold text-muted">StockMate</Text>
         </View>
         <View className="flex-row gap-2">
           <IconButton

@@ -1,19 +1,44 @@
 import React, { useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
-import { AxiosError } from 'axios';
-import { LockKeyhole, Package, UserRound } from 'lucide-react-native';
+import { Alert, Text, TextInput, View } from 'react-native';
+import axios from 'axios';
+import { AlertCircle, LockKeyhole, Package, UserRound } from 'lucide-react-native';
 import { useAuth } from '@/features/auth/context/auth-context';
 import { colors } from '@/shared/theme/tokens';
 import { AppButton, Screen, Surface } from '@/shared/ui';
 
 function getLoginError(error: unknown): string {
-  if (error instanceof AxiosError) {
-    const message = (error.response?.data as { message?: string | string[] } | undefined)
-      ?.message;
+  if (axios.isAxiosError(error)) {
+    if (!error.response) {
+      return 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng.';
+    }
+
+    const status = error.response.status;
+    const data = error.response.data as { message?: string | string[]; code?: string } | undefined;
+
+    if (
+      status === 401 ||
+      status === 400 ||
+      data?.code === 'AUTH_INVALID_CREDENTIALS' ||
+      (typeof data?.message === 'string' &&
+        (data.message.toLowerCase().includes('sai') ||
+          data.message.toLowerCase().includes('unauthorized') ||
+          data.message.toLowerCase().includes('invalid') ||
+          data.message.toLowerCase().includes('password') ||
+          data.message.toLowerCase().includes('user')))
+    ) {
+      return 'Tài khoản hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.';
+    }
+
+    const message = data?.message;
     if (Array.isArray(message)) return message.join(', ');
-    if (message) return message;
+    if (typeof message === 'string' && message.trim()) return message;
   }
-  return 'Không thể đăng nhập. Vui lòng kiểm tra tài khoản và thử lại.';
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return 'Tài khoản hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.';
 }
 
 export function LoginScreen() {
@@ -24,14 +49,18 @@ export function LoginScreen() {
 
   async function handleLogin() {
     if (!username.trim() || !password) {
-      setError('Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.');
+      const emptyMsg = 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.';
+      setError(emptyMsg);
+      Alert.alert('Thông báo', emptyMsg);
       return;
     }
     setError(null);
     try {
       await login(username.trim(), password);
     } catch (loginError) {
-      setError(getLoginError(loginError));
+      const errMsg = getLoginError(loginError);
+      setError(errMsg);
+      Alert.alert('Đăng nhập thất bại', errMsg);
     }
   }
 
@@ -44,7 +73,7 @@ export function LoginScreen() {
         <View className="mb-4 h-20 w-20 items-center justify-center rounded-[28px] bg-primary-soft">
           <Package size={38} color={colors.primary} strokeWidth={1.9} />
         </View>
-        <Text className="text-[28px] font-semibold tracking-[-1px] text-ink">PBVM WMS</Text>
+        <Text className="text-[28px] font-semibold tracking-[-1px] text-ink">StockMate</Text>
         <Text className="mt-1 text-sm text-muted">Vận hành kho gọn, rõ và đúng vai trò</Text>
       </View>
 
@@ -85,9 +114,33 @@ export function LoginScreen() {
         </View>
 
         {error ? (
-          <Text accessibilityRole="alert" className="mt-3 text-sm leading-5 text-danger">
-            {error}
-          </Text>
+          <View
+            accessibilityRole="alert"
+            style={{
+              marginTop: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              borderRadius: 16,
+              backgroundColor: colors.dangerSoft,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: '#fca5a5',
+            }}
+          >
+            <AlertCircle size={20} color={colors.danger} />
+            <Text
+              style={{
+                marginLeft: 10,
+                flex: 1,
+                fontSize: 14,
+                fontWeight: '500',
+                lineHeight: 20,
+                color: colors.danger,
+              }}
+            >
+              {error}
+            </Text>
+          </View>
         ) : null}
 
         <View className="mt-6">

@@ -60,6 +60,12 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textMuted,
       }}
     >
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null,
+        }}
+      />
       {screens.map((screen) => {
         const Icon = screen.icon;
         const allowed = user ? canAccessTab(user.role, screen.name) : false;
