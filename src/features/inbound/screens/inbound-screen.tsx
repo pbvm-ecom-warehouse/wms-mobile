@@ -99,6 +99,11 @@ export function InboundScreen() {
     setSelectedGrn(updated);
   };
 
+  const handleGrnDeleted = (deletedId: string) => {
+    setGrnList((prev) => prev.filter((item) => item.id !== deletedId));
+    setSelectedGrn(null);
+  };
+
   const handleGrnCreated = (created: GoodsReceiptNote) => {
     setGrnList((prev) => [created, ...prev]);
   };
@@ -242,6 +247,7 @@ export function InboundScreen() {
         grn={selectedGrn}
         onClose={() => setSelectedGrn(null)}
         onUpdate={handleGrnUpdated}
+        onDelete={handleGrnDeleted}
       />
     </Screen>
   );

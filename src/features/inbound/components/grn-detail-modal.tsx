@@ -16,6 +16,7 @@ import {
   CheckCircle,
   CheckCircle2,
   ImageIcon,
+  Trash2,
   X,
 } from 'lucide-react-native';
 import { useAuth } from '@/features/auth/context/auth-context';
@@ -26,6 +27,7 @@ import { AppButton, StatusBadge } from '@/shared/ui';
 import {
   approveGoodsReceiptNote,
   confirmGoodsReceiptNote,
+  deleteGoodsReceiptNote,
   getGoodsReceiptNote,
   uploadGrnImage,
 } from '../api/grn-api';
@@ -60,14 +62,16 @@ interface GrnDetailModalProps {
   grn: GoodsReceiptNote | null;
   onClose: () => void;
   onUpdate: (updatedGrn: GoodsReceiptNote) => void;
+  onDelete?: (grnId: string) => void;
 }
 
-export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailModalProps) {
+export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: GrnDetailModalProps) {
   const { user } = useAuth();
   const [detailGrn, setDetailGrn] = useState<GoodsReceiptNote | null>(grn);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -102,8 +106,42 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
     activeGrn.status === 'CONFIRMED' &&
     (userRole === WmsRole.MANAGER || userRole === WmsRole.ADMIN);
 
+  const canDelete =
+    activeGrn.status === 'DRAFT' &&
+    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN);
+
   const canUploadImage =
     userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER;
+
+  const handleDelete = async () => {
+    Alert.alert(
+      'Xác nhận xóa phiếu',
+      `Bạn có chắc chắn muốn xóa vĩnh viễn phiếu nhập kho ${activeGrn.grnNumber || activeGrn.id} không? Hành động này không thể hoàn tác.`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa phiếu',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            setErrorMsg(null);
+            try {
+              await deleteGoodsReceiptNote(activeGrn.id);
+              Alert.alert('Thành công', 'Đã xóa phiếu nhập kho thành công');
+              if (onDelete) onDelete(activeGrn.id);
+              onClose();
+            } catch (err: any) {
+              const msg =
+                err?.response?.data?.message || err?.message || 'Xóa phiếu nhập kho thất bại';
+              setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleConfirm = async () => {
     setConfirming(true);
@@ -371,7 +409,7 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
           </View>
 
           {/* Action Buttons */}
-          <View style={{ marginBottom: 32 }}>
+          <View style={{ marginBottom: 32, gap: 10 }}>
             {canConfirm ? (
               <AppButton
                 label="Xác Nhận Nhận Hàng (CONFIRM)"
@@ -388,6 +426,36 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate }: GrnDetailMod
                 onPress={handleApprove}
                 icon={<CheckCircle size={18} color="#ffffff" />}
               />
+            ) : null}
+
+            {canDelete ? (
+              <TouchableOpacity
+                onPress={handleDelete}
+                disabled={deleting || confirming}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  backgroundColor: '#ffebeb',
+                  borderWidth: 1,
+                  borderColor: '#f8c4c4',
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  marginTop: 4,
+                }}
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#dc2626" />
+                ) : (
+                  <>
+                    <Trash2 size={16} color="#dc2626" />
+                    <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 14 }}>
+                      Xóa Phiếu Nhập (DRAFT)
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
             ) : null}
           </View>
         </ScrollView>

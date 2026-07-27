@@ -74,6 +74,10 @@ export async function approveGoodsReceiptNote(id: string): Promise<GoodsReceiptN
   return unwrapData<GoodsReceiptNote>(response.data);
 }
 
+export async function deleteGoodsReceiptNote(id: string): Promise<void> {
+  await apiClient.delete(`/goods-receipt-notes/${encodeURIComponent(id)}`);
+}
+
 export async function uploadGoodsReceiptNoteImage(
   id: string,
   imageUri: string,
