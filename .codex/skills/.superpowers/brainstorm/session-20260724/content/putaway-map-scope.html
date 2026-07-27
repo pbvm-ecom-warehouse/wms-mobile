@@ -1,0 +1,47 @@
+<h2>Hiển thị gợi ý vị trí cất hàng trong tab Nhận hàng</h2>
+<p class="subtitle">Chọn mức “map” phù hợp với dữ liệu kho hiện có.</p>
+
+<div class="split">
+  <div class="mockup option" data-choice="guided-map" onclick="toggleSelect(this)">
+    <div class="mockup-header">A — Sơ đồ kho + đường đến kệ</div>
+    <div class="mockup-body" style="padding:16px">
+      <div style="display:grid;grid-template-columns:1.15fr .85fr;gap:12px">
+        <div style="border:1px solid #bfdbfe;border-radius:10px;padding:12px;background:#f8fbff;min-height:210px">
+          <div style="font-size:12px;color:#475569;margin-bottom:8px">Cổng nhận → Lối chính → Rack B2</div>
+          <div style="height:126px;border:1px dashed #94a3b8;border-radius:8px;position:relative;background:linear-gradient(90deg,#f1f5f9 24%,transparent 24%,transparent 26%,#f1f5f9 26%,#f1f5f9 49%,transparent 49%,transparent 51%,#f1f5f9 51%,#f1f5f9 74%,transparent 74%,transparent 76%,#f1f5f9 76%)">
+            <span style="position:absolute;left:8%;top:68%;font-size:11px">STAGING</span>
+            <span style="position:absolute;left:60%;top:26%;padding:5px 8px;border-radius:5px;background:#2563eb;color:white;font-size:11px">B2-S01</span>
+            <span style="position:absolute;left:23%;top:56%;width:39%;border-top:3px solid #2563eb;transform:rotate(-22deg)"></span>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:#166534">✓ Kệ gợi ý B2-S01 · còn trống 260</div>
+        </div>
+        <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px">
+          <div style="font-weight:650">Xác nhận cất hàng</div>
+          <div style="margin-top:10px;border:1px solid #cbd5e1;border-radius:6px;padding:7px;font-size:12px">Quét mã hàng</div>
+          <div style="margin-top:8px;border:1px solid #cbd5e1;border-radius:6px;padding:7px;font-size:12px">Quét mã kệ</div>
+          <div style="margin-top:8px;background:#2563eb;color:white;border-radius:6px;padding:7px;text-align:center;font-size:12px">Lưu vị trí</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>Sơ đồ thật theo layout kho</h3><p>Cần API/toạ độ layout đã publish để không vẽ một sơ đồ giả.</p></div>
+  </div>
+  <div class="mockup option" data-choice="verified-guidance" onclick="toggleSelect(this)">
+    <div class="mockup-header">B — Gợi ý đã xác thực, không vẽ sơ đồ giả</div>
+    <div class="mockup-body" style="padding:16px">
+      <div style="border:1px solid #bbf7d0;border-radius:10px;padding:14px;background:#f0fdf4">
+        <div style="font-size:12px;color:#166534">Gợi ý vị trí từ WMS</div>
+        <div style="font-size:22px;font-weight:700;margin-top:6px">B2-S01</div>
+        <div style="font-size:12px;color:#475569;margin-top:4px">Còn trống 260 · đủ cho 20 cái</div>
+        <div style="font-size:12px;color:#475569;margin-top:8px">Đi đến: Zone B / Rack B2 / Shelf S01</div>
+      </div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="border:1px solid #cbd5e1;border-radius:6px;padding:8px;font-size:12px">1. Quét mã hàng</div>
+        <div style="border:1px solid #cbd5e1;border-radius:6px;padding:8px;font-size:12px">2. Quét mã kệ</div>
+      </div>
+      <div style="margin-top:8px;background:#2563eb;color:white;border-radius:6px;padding:8px;text-align:center;font-size:12px">Xác nhận cất</div>
+    </div>
+    <div class="card-body"><h3>Thông tin đúng với API hiện có</h3><p>Dùng shelf code/capacity thật; sẽ nâng thành map khi backend có layout/toạ độ thật.</p></div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:20px">Bấm chọn A hoặc B. Mình khuyến nghị B ở đợt này để không dẫn người vận hành tới một sơ đồ không phản ánh kho thật.</p>
