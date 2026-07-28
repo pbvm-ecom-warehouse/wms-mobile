@@ -6,7 +6,6 @@ import {
   Modal,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -173,50 +172,49 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
 
   const handleItemChange = (index: number, key: keyof DraftItemState, value: any) => {
     setDraftItems((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [key]: value };
-      return updated;
+      const next = [...prev];
+      next[index] = { ...next[index], [key]: value };
+      return next;
     });
   };
 
   const toggleSelectItem = (index: number) => {
     setDraftItems((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], selected: !updated[index].selected };
-      return updated;
+      const next = [...prev];
+      next[index] = { ...next[index], selected: !next[index].selected };
+      return next;
     });
   };
 
   const handleSubmit = async () => {
     if (!selectedPo) return;
-    setErrorMsg(null);
 
     const activeItems = draftItems.filter((i) => i.selected);
-
     if (activeItems.length === 0) {
-      setErrorMsg('Vui lòng chọn ít nhất 1 mặt hàng để nhập kho');
+      Alert.alert('Cảnh báo', 'Vui lòng chọn ít nhất 1 mặt hàng thực nhận để tạo phiếu nhập kho.');
       return;
     }
 
-    const invalidItem = activeItems.find(
-      (item) => isNaN(Number(item.actualQty)) || Number(item.actualQty) <= 0,
-    );
-    if (invalidItem) {
-      setErrorMsg(`Số lượng thực nhập cho SKU ${invalidItem.sku} phải là số dương`);
-      return;
+    for (const item of activeItems) {
+      const qtyNum = Number(item.actualQty);
+      if (isNaN(qtyNum) || qtyNum <= 0) {
+        Alert.alert('Số lượng không hợp lệ', `Số lượng thực nhận cho SKU "${item.sku}" phải lớn hơn 0.`);
+        return;
+      }
     }
 
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       const grn = await createGoodsReceiptNote({
         purchaseOrderId: selectedPo.id,
-        items: activeItems.map((item) => ({
-          itemId: item.itemId,
-          actualQty: Number(item.actualQty),
-          unit: item.unit,
-          lotNumber: item.lotNumber?.trim() || undefined,
-          expiryDate: item.expiryDate?.trim() || undefined,
-          note: item.note?.trim() || undefined,
+        items: activeItems.map((i) => ({
+          itemId: i.itemId,
+          actualQty: Number(i.actualQty),
+          unit: i.unit,
+          lotNumber: i.lotNumber,
+          expiryDate: i.expiryDate,
+          note: i.note,
         })),
       });
 
@@ -224,15 +222,15 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
         for (const uri of evidenceImages) {
           try {
             await uploadGrnImage(grn.id, uri);
-          } catch (uploadErr) {
-            console.warn('Lỗi tải ảnh:', uploadErr);
+          } catch (imgErr) {
+            console.warn('Lỗi tải ảnh minh chứng:', imgErr);
           }
         }
       }
 
       Alert.alert(
         'Thành công',
-        `Đã tạo phiếu nhập kho ${grn.grnNumber || ''}${
+        `Đã tạo phiếu nhập kho ${grn.grnNumber || grn.id} thành công!${
           evidenceImages.length > 0 ? ` (kèm ${evidenceImages.length} ảnh minh chứng)` : ''
         }`,
       );
@@ -244,8 +242,7 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
           'Lỗi 403 Forbidden từ Server: Tài khoản hiện tại chưa được phân quyền tạo phiếu nhập kho (POST /goods-receipt-notes). Vui lòng đăng nhập bằng tài khoản Quản lý (MANAGER / ADMIN) hoặc kiểm tra phân quyền tài khoản.',
         );
       } else {
-        const msg =
-          err?.response?.data?.message || err?.message || 'Tạo phiếu nhập kho thất bại';
+        const msg = err?.response?.data?.message || err?.message || 'Tạo phiếu nhập kho thất bại';
         setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
       }
     } finally {
@@ -256,71 +253,72 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
   const query = searchPo.trim().toLowerCase();
   const filteredPos = purchaseOrders.filter((po) => {
     if (!query) return true;
-    const matchPoNumber = po.poNumber?.toLowerCase().includes(query);
-    const matchSupplier = po.supplierName?.toLowerCase().includes(query) || po.supplierCode?.toLowerCase().includes(query);
-    return Boolean(matchPoNumber || matchSupplier);
+    return (
+      po.poNumber?.toLowerCase().includes(query) ||
+      po.supplierName?.toLowerCase().includes(query)
+    );
   });
 
   const totalActualQty = draftItems
     .filter((i) => i.selected)
-    .reduce((sum, item) => sum + (Number(item.actualQty) || 0), 0);
+    .reduce((sum, i) => sum + (Number(i.actualQty) || 0), 0);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <View className="flex-1 bg-[#ececf1]">
         {/* Modal Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
+        <View className="bg-white px-4 pt-12 pb-3 border-b border-[#e4e5e9] flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2 flex-1">
             {selectedPo ? (
               <TouchableOpacity
                 onPress={() => setSelectedPo(null)}
-                style={styles.backBtn}
+                className="p-1.5 bg-[#f5f6f8] rounded-full mr-1"
               >
                 <ArrowLeft size={20} color={colors.text} />
               </TouchableOpacity>
             ) : null}
-            <View style={{ flex: 1 }}>
-              <Text style={styles.titleText}>Tạo Phiếu Nhập Kho</Text>
-              <Text style={styles.subtitleText}>
+            <View className="flex-1">
+              <Text className="text-lg font-bold text-[#101114]">Tạo Phiếu Nhập Kho</Text>
+              <Text className="text-xs text-[#6c7078] mt-0.5">
                 {selectedPo ? `Đơn mua: ${selectedPo.poNumber}` : 'Bước 1: Chọn Đơn hàng PO & Hàng thực nhận'}
               </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={onClose} className="p-2 bg-[#f5f6f8] rounded-full">
             <X size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
         {errorMsg ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{errorMsg}</Text>
+          <View className="bg-[#ffebeb] p-3 mx-4 mt-3 rounded-xl border border-[#f8c4c4]">
+            <Text className="text-xs font-semibold text-[#c83a3a]">{errorMsg}</Text>
           </View>
         ) : null}
 
-        <ScrollView style={{ flex: 1, padding: 16 }} keyboardShouldPersistTaps="handled">
+        <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
           {!selectedPo ? (
             /* STEP 1: Select PO */
             <View>
               {/* Header & Search */}
-              <View style={styles.rowBetween}>
-                <Text style={styles.sectionTitle}>
+              <View className="flex-row justify-between items-center mb-2">
+                <Text className="text-sm font-bold text-[#101114]">
                   Danh sách Đơn Mua Hàng (PO)
                 </Text>
                 <TouchableOpacity
                   onPress={loadPos}
                   disabled={loadingPos}
-                  style={styles.reloadBtn}
+                  className="flex-row items-center gap-1 bg-[#eaf3ff] px-2.5 py-1 rounded-lg"
                 >
                   <RefreshCw size={13} color={colors.primary} />
-                  <Text style={styles.reloadText}>Tải lại</Text>
+                  <Text className="text-xs font-bold text-[#0878f9]">Tải lại</Text>
                 </TouchableOpacity>
               </View>
 
               {/* Search Bar */}
-              <View style={styles.searchBox}>
+              <View className="bg-white flex-row items-center px-3 py-2 rounded-xl border border-[#e4e5e9] mb-3">
                 <Search size={16} color={colors.textMuted} />
                 <TextInput
-                  style={styles.searchInput}
+                  className="flex-1 ml-2 text-xs text-[#101114]"
                   value={searchPo}
                   onChangeText={setSearchPo}
                   placeholder="Tìm theo mã PO hoặc Nhà cung cấp..."
@@ -333,19 +331,19 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
               </View>
 
               {loadingPos ? (
-                <View style={styles.centerBox}>
+                <View className="py-10 items-center justify-center gap-2">
                   <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={styles.mutedText}>
+                  <Text className="text-xs text-[#6c7078]">
                     Đang tải danh sách đơn PO...
                   </Text>
                 </View>
               ) : filteredPos.length === 0 ? (
-                <View style={styles.emptyBox}>
+                <View className="py-10 items-center justify-center px-4 bg-white rounded-2xl border border-dashed border-[#e4e5e9]">
                   <Package size={36} color={colors.textMuted} />
-                  <Text style={styles.emptyTitle}>
+                  <Text className="text-sm font-bold text-[#101114] mt-2">
                     Không tìm thấy đơn PO
                   </Text>
-                  <Text style={styles.emptyDesc}>
+                  <Text className="text-xs text-[#6c7078] text-center mt-1">
                     Chưa có đơn đặt hàng PO nào chờ nhận hàng hoặc khớp với từ khóa tìm kiếm.
                   </Text>
                 </View>
@@ -354,30 +352,30 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                   <TouchableOpacity
                     key={po.id}
                     onPress={() => handleSelectPo(po)}
-                    style={styles.poCard}
+                    className="bg-white p-3.5 rounded-2xl border border-[#e4e5e9] mb-2.5 flex-row items-center justify-between"
                     activeOpacity={0.8}
                   >
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Text style={styles.poNumberText}>{po.poNumber}</Text>
+                    <View className="flex-1 mr-2">
+                      <View className="flex-row items-center gap-2 mb-1">
+                        <Text className="text-sm font-bold text-[#0878f9]">{po.poNumber}</Text>
                         <StatusBadge variant="neutral" label={po.status || 'CONFIRMED'} />
                       </View>
-                      <Text style={styles.supplierText}>
+                      <Text className="text-xs font-semibold text-[#101114] mb-1">
                         NCC: {po.supplierName || 'Chưa cập nhật'}
                       </Text>
-                      <View style={styles.poMetaRow}>
-                        <Text style={styles.metaText}>
-                          Số SKU: <Text style={{ fontWeight: 'bold', color: '#101114' }}>{po.items?.length || 0} mặt hàng</Text>
+                      <View className="flex-row gap-3 mt-1">
+                        <Text className="text-xs text-[#6c7078]">
+                          Số SKU: <Text className="font-bold text-[#101114]">{po.items?.length || 0} mặt hàng</Text>
                         </Text>
                         {po.orderDate ? (
-                          <Text style={styles.metaText}>
-                            Ngày đặt: <Text style={{ fontWeight: '500', color: '#101114' }}>{po.orderDate}</Text>
+                          <Text className="text-xs text-[#6c7078]">
+                            Ngày đặt: <Text className="font-medium text-[#101114]">{po.orderDate}</Text>
                           </Text>
                         ) : null}
                       </View>
                     </View>
-                    <View style={styles.selectPoBtn}>
-                      <Text style={styles.selectPoBtnText}>Chọn PO</Text>
+                    <View className="bg-[#0878f9] px-3 py-1.5 rounded-xl">
+                      <Text className="text-xs font-bold text-white">Chọn PO</Text>
                     </View>
                   </TouchableOpacity>
                 ))
@@ -385,59 +383,58 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
             </View>
           ) : (
             /* STEP 2: Enter Item Details */
-            <View style={{ paddingBottom: 40 }}>
+            <View className="pb-10">
               {/* Selected PO Summary Header */}
-              <View style={styles.selectedPoCard}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.poLabelHeader}>
+              <View className="bg-[#eaf3ff] p-3.5 rounded-2xl border border-[#0878f9] mb-3 flex-row items-center justify-between">
+                <View className="flex-1 mr-2">
+                  <Text className="text-[11px] font-bold text-[#0878f9] uppercase mb-0.5">
                     Đơn Đặt Hàng PO Được Chọn
                   </Text>
-                  <Text style={styles.selectedPoNumber}>{selectedPo.poNumber}</Text>
-                  <Text style={styles.metaText}>
-                    Nhà cung cấp: <Text style={{ fontWeight: '600', color: '#101114' }}>{selectedPo.supplierName}</Text>
+                  <Text className="text-base font-bold text-[#101114] mb-0.5">{selectedPo.poNumber}</Text>
+                  <Text className="text-xs text-[#6c7078]">
+                    Nhà cung cấp: <Text className="font-semibold text-[#101114]">{selectedPo.supplierName}</Text>
                   </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setSelectedPo(null)}
-                  style={styles.changePoBtn}
+                  className="bg-white border border-[#0878f9] px-3 py-1.5 rounded-xl"
                 >
-                  <Text style={styles.changePoBtnText}>Đổi PO</Text>
+                  <Text className="text-xs font-bold text-[#0878f9]">Đổi PO</Text>
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.sectionTitle}>
+              <Text className="text-sm font-bold text-[#101114] mb-2">
                 Danh sách Hàng Thực Nhập ({draftItems.filter((i) => i.selected).length}/{draftItems.length} mặt hàng)
               </Text>
 
               {draftItems.map((item, index) => (
                 <View
                   key={item.itemId || index}
-                  style={[
-                    styles.itemCard,
-                    item.selected ? styles.itemCardSelected : styles.itemCardUnselected,
-                  ]}
+                  className={`bg-white p-3.5 rounded-2xl border mb-2.5 ${
+                    item.selected ? 'border-[#0878f9]' : 'border-[#e4e5e9] opacity-70'
+                  }`}
                 >
                   {/* Item Header & Selection Checkbox */}
-                  <View style={styles.itemCardHeader}>
+                  <View className="flex-row items-center justify-between mb-2">
                     <TouchableOpacity
                       onPress={() => toggleSelectItem(index)}
-                      style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}
+                      className="flex-row items-center flex-1 mr-2"
                     >
                       {item.selected ? (
                         <CheckSquare size={20} color="#0878f9" />
                       ) : (
                         <Square size={20} color={colors.textMuted} />
                       )}
-                      <View style={{ marginLeft: 10, flex: 1 }}>
-                        <Text style={styles.itemNameText}>
+                      <View className="ml-2.5 flex-1">
+                        <Text className="text-sm font-bold text-[#101114]">
                           {item.itemName || item.sku}
                         </Text>
-                        <Text style={styles.skuText}>SKU: {item.sku}</Text>
+                        <Text className="text-xs text-[#6c7078]">SKU: {item.sku}</Text>
                       </View>
                     </TouchableOpacity>
 
-                    <View style={styles.expectedQtyBadge}>
-                      <Text style={styles.expectedQtyText}>
+                    <View className="bg-[#f5f6f8] px-2 py-1 rounded-lg border border-[#e4e5e9]">
+                      <Text className="text-xs font-bold text-[#6c7078]">
                         PO đặt: {item.expectedQty} {item.unit}
                       </Text>
                     </View>
@@ -446,23 +443,23 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                   {item.selected ? (
                     <View>
                       {/* Quantity & Lot Number Inputs */}
-                      <View style={styles.flexRowGap}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.inputLabel}>
-                            Thực nhập ({item.unit}) <Text style={{ color: '#ef4444' }}>*</Text>
+                      <View className="flex-row gap-2 mt-2">
+                        <View className="flex-1">
+                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">
+                            Thực nhập ({item.unit}) <Text className="text-[#ef4444]">*</Text>
                           </Text>
                           <TextInput
-                            style={[styles.inputField, { fontWeight: 'bold' }]}
+                            className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114] font-bold"
                             keyboardType="numeric"
                             value={item.actualQty}
                             onChangeText={(val) => handleItemChange(index, 'actualQty', val)}
                             placeholder="Số lượng thực nhập"
                           />
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.inputLabel}>Số Lô (Lot Number)</Text>
+                        <View className="flex-1">
+                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">Số Lô (Lot Number)</Text>
                           <TextInput
-                            style={styles.inputField}
+                            className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                             value={item.lotNumber}
                             onChangeText={(val) => handleItemChange(index, 'lotNumber', val)}
                             placeholder="VD: LOT-20260727"
@@ -471,12 +468,12 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                       </View>
 
                       {/* Expiry Date & Note Inputs */}
-                      <View style={[styles.flexRowGap, { marginTop: 8 }]}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.inputLabel}>Hạn Sử Dụng</Text>
+                      <View className="flex-row gap-2 mt-2">
+                        <View className="flex-1">
+                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">Hạn Sử Dụng</Text>
                           {Platform.OS === 'web' ? (
                             <TextInput
-                              style={styles.inputField}
+                              className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                               // @ts-ignore
                               type="date"
                               value={item.expiryDate}
@@ -486,15 +483,14 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                             <TouchableOpacity
                               activeOpacity={0.7}
                               onPress={() => setActiveDatePickerIndex(index)}
-                              style={styles.datePickerButton}
+                              className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 flex-row items-center justify-between"
                             >
-                              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                                <Calendar size={16} color="#6c7078" style={{ marginRight: 6 }} />
+                              <View className="flex-row items-center flex-1">
+                                <Calendar size={16} color="#6c7078" className="mr-1.5" />
                                 <Text
-                                  style={[
-                                    styles.datePickerText,
-                                    !item.expiryDate && styles.datePickerPlaceholder,
-                                  ]}
+                                  className={`text-xs font-medium ${
+                                    item.expiryDate ? 'text-[#101114]' : 'text-[#9ca3af]'
+                                  }`}
                                 >
                                   {item.expiryDate || 'YYYY-MM-DD'}
                                 </Text>
@@ -514,10 +510,10 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                             </TouchableOpacity>
                           )}
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.inputLabel}>Ghi Chú</Text>
+                        <View className="flex-1">
+                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">Ghi Chú</Text>
                           <TextInput
-                            style={styles.inputField}
+                            className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                             value={item.note}
                             onChangeText={(val) => handleItemChange(index, 'note', val)}
                             placeholder="Ghi chú hàng hóa"
@@ -526,7 +522,7 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                       </View>
                     </View>
                   ) : (
-                    <Text style={styles.unselectedText}>
+                    <Text className="text-xs italic text-[#9ca3af] mt-1">
                       Bỏ chọn (không nhập mặt hàng này)
                     </Text>
                   )}
@@ -534,64 +530,39 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
               ))}
 
               {/* Evidence Images Section */}
-              <View style={[styles.card, { marginTop: 12 }]}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.cardHeader}>
+              <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mt-3">
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text className="text-xs font-bold text-[#6c7078] uppercase">
                     Ảnh minh chứng nhập kho ({evidenceImages.length})
                   </Text>
                 </View>
 
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 8 }}>
+                <View className="flex-row gap-2 my-2">
                   <TouchableOpacity
                     onPress={handleTakePhoto}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                      backgroundColor: '#0878f9',
-                      paddingHorizontal: 12,
-                      paddingVertical: 9,
-                      borderRadius: 10,
-                    }}
+                    className="flex-row items-center gap-1.5 bg-[#0878f9] px-3 py-2 rounded-xl"
                   >
                     <Camera size={16} color="#ffffff" />
-                    <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>Chụp ảnh trực tiếp</Text>
+                    <Text className="text-[#ffffff] font-bold text-xs">Chụp ảnh trực tiếp</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     onPress={handlePickImage}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                      backgroundColor: '#f5f6f8',
-                      borderWidth: 1,
-                      borderColor: '#e4e5e9',
-                      paddingHorizontal: 12,
-                      paddingVertical: 9,
-                      borderRadius: 10,
-                    }}
+                    className="flex-row items-center gap-1.5 bg-[#f5f6f8] border border-[#e4e5e9] px-3 py-2 rounded-xl"
                   >
                     <ImageIcon size={16} color="#0878f9" />
-                    <Text style={{ color: '#101114', fontWeight: '500', fontSize: 13 }}>Thư viện ảnh</Text>
+                    <Text className="text-[#101114] font-medium text-xs">Thư viện ảnh</Text>
                   </TouchableOpacity>
                 </View>
 
                 {evidenceImages.length > 0 ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingTop: 6 }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row pt-1.5">
                     {evidenceImages.map((uri, idx) => (
-                      <View key={idx} style={{ position: 'relative', marginRight: 12, marginTop: 4 }}>
-                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 10 }} />
+                      <View key={idx} className="relative mr-3 mt-1">
+                        <Image source={{ uri }} className="w-[80px] h-[80px] rounded-xl" />
                         <TouchableOpacity
                           onPress={() => handleRemoveImage(idx)}
-                          style={{
-                            position: 'absolute',
-                            top: -6,
-                            right: -6,
-                            backgroundColor: '#ef4444',
-                            borderRadius: 12,
-                            padding: 3,
-                          }}
+                          className="absolute -top-1.5 -right-1.5 bg-[#ef4444] rounded-full p-1"
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
                           <X size={12} color="#ffffff" />
@@ -600,20 +571,20 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                     ))}
                   </ScrollView>
                 ) : (
-                  <Text style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic', marginTop: 4 }}>
+                  <Text className="text-xs color-[#9ca3af] italic mt-1">
                     Chưa chụp/chọn ảnh minh chứng nào. Bấm nút phía trên để chụp hoặc tải ảnh hàng hóa.
                   </Text>
                 )}
               </View>
 
               {/* Submit Section */}
-              <View style={{ marginTop: 16, marginBottom: 32 }}>
-                <View style={styles.totalRow}>
-                  <Text style={styles.metaText}>Tổng số lượng thực nhận:</Text>
-                  <Text style={styles.totalQtyText}>{totalActualQty} sản phẩm</Text>
+              <View className="mt-4 mb-8">
+                <View className="flex-row justify-between items-center bg-white p-3.5 rounded-xl border border-[#e4e5e9] mb-3">
+                  <Text className="text-xs text-[#6c7078]">Tổng số lượng thực nhận:</Text>
+                  <Text className="text-base font-bold text-[#0878f9]">{totalActualQty} sản phẩm</Text>
                 </View>
                 <AppButton
-                  label="Xác Nhận Tạo Phiếu Nhập (DRAFT)"
+                  label="Xác Nhận Tạo Phiếu Nhập (Nháp)"
                   loading={submitting}
                   onPress={handleSubmit}
                   icon={<CheckCircle2 size={18} color="#ffffff" />}
@@ -714,69 +685,71 @@ function DatePickerModal({ visible, value, onSelect, onClose }: DatePickerModalP
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
-      <TouchableOpacity style={styles.dpOverlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={styles.dpContent}>
+      <TouchableOpacity className="flex-1 bg-black/45 justify-center items-center p-4" activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} className="w-full max-w-[360px] bg-white rounded-2xl p-4 shadow-lg">
           {/* Header */}
-          <View style={styles.dpHeader}>
-            <Text style={styles.dpTitle}>Chọn Hạn Sử Dụng</Text>
-            <TouchableOpacity onPress={onClose} style={styles.dpCloseBtn}>
+          <View className="flex-row justify-between items-center mb-3">
+            <Text className="text-base font-bold text-[#101114]">Chọn Hạn Sử Dụng</Text>
+            <TouchableOpacity onPress={onClose} className="p-1.5 rounded-full bg-[#f5f6f8]">
               <X size={18} color="#6c7078" />
             </TouchableOpacity>
           </View>
 
           {/* Quick Presets */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dpPresetsRow}>
-            <TouchableOpacity style={styles.dpChip} onPress={() => handlePreset(0)}>
-              <Text style={styles.dpChipText}>Hôm nay</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
+            <TouchableOpacity className="bg-[#eaf3ff] px-3 py-1.5 rounded-full mr-2" onPress={() => handlePreset(0)}>
+              <Text className="text-xs font-semibold text-[#0878f9]">Hôm nay</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dpChip} onPress={() => handlePreset(3)}>
-              <Text style={styles.dpChipText}>+3 Tháng</Text>
+            <TouchableOpacity className="bg-[#eaf3ff] px-3 py-1.5 rounded-full mr-2" onPress={() => handlePreset(3)}>
+              <Text className="text-xs font-semibold text-[#0878f9]">+3 Tháng</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dpChip} onPress={() => handlePreset(6)}>
-              <Text style={styles.dpChipText}>+6 Tháng</Text>
+            <TouchableOpacity className="bg-[#eaf3ff] px-3 py-1.5 rounded-full mr-2" onPress={() => handlePreset(6)}>
+              <Text className="text-xs font-semibold text-[#0878f9]">+6 Tháng</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dpChip} onPress={() => handlePreset(12)}>
-              <Text style={styles.dpChipText}>+1 Năm</Text>
+            <TouchableOpacity className="bg-[#eaf3ff] px-3 py-1.5 rounded-full mr-2" onPress={() => handlePreset(12)}>
+              <Text className="text-xs font-semibold text-[#0878f9]">+1 Năm</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dpChip} onPress={() => handlePreset(24)}>
-              <Text style={styles.dpChipText}>+2 Năm</Text>
+            <TouchableOpacity className="bg-[#eaf3ff] px-3 py-1.5 rounded-full mr-2" onPress={() => handlePreset(24)}>
+              <Text className="text-xs font-semibold text-[#0878f9]">+2 Năm</Text>
             </TouchableOpacity>
           </ScrollView>
 
           {/* Month / Year Navigator */}
-          <View style={styles.dpNavRow}>
-            <TouchableOpacity onPress={handlePrevMonth} style={styles.dpNavBtn}>
+          <View className="flex-row justify-between items-center mb-3 px-1">
+            <TouchableOpacity onPress={handlePrevMonth} className="p-1.5 rounded-lg bg-[#f5f6f8]">
               <ChevronLeft size={20} color="#101114" />
             </TouchableOpacity>
-            <Text style={styles.dpNavTitle}>
+            <Text className="text-sm font-bold text-[#101114]">
               {monthLabels[month]} {year}
             </Text>
-            <TouchableOpacity onPress={handleNextMonth} style={styles.dpNavBtn}>
+            <TouchableOpacity onPress={handleNextMonth} className="p-1.5 rounded-lg bg-[#f5f6f8]">
               <ChevronRight size={20} color="#101114" />
             </TouchableOpacity>
           </View>
 
           {/* Days of Week */}
-          <View style={styles.dpWeekRow}>
+          <View className="flex-row justify-around mb-2">
             {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w, idx) => (
-              <Text key={idx} style={styles.dpWeekText}>{w}</Text>
+              <Text key={idx} className="w-9 text-center text-xs font-bold text-[#6c7078]">{w}</Text>
             ))}
           </View>
 
           {/* Days Grid */}
-          <View style={styles.dpGrid}>
+          <View className="flex-row flex-wrap justify-start">
             {days.map((item, idx) => {
               if (!item) {
-                return <View key={`empty-${idx}`} style={styles.dpDayCell} />;
+                return <View key={`empty-${idx}`} className="w-[14.28%] h-10 justify-center items-center my-0.5 rounded-lg" />;
               }
               const isSelected = value === item.dateStr;
               return (
                 <TouchableOpacity
                   key={item.dateStr}
-                  style={[styles.dpDayCell, isSelected && styles.dpDayCellSelected]}
+                  className={`w-[14.28%] h-10 justify-center items-center my-0.5 rounded-lg ${
+                    isSelected ? 'bg-[#0878f9]' : ''
+                  }`}
                   onPress={() => onSelect(item.dateStr)}
                 >
-                  <Text style={[styles.dpDayText, isSelected && styles.dpDayTextSelected]}>
+                  <Text className={`text-sm ${isSelected ? 'text-white font-bold' : 'text-[#101114] font-medium'}`}>
                     {item.day}
                   </Text>
                 </TouchableOpacity>
@@ -788,471 +761,3 @@ function DatePickerModal({ visible, value, onSelect, onClose }: DatePickerModalP
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ececf1',
-  },
-  header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e4e5e9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 8,
-  },
-  backBtn: {
-    marginRight: 12,
-    padding: 6,
-    borderRadius: 20,
-    backgroundColor: '#f5f6f8',
-  },
-  closeBtn: {
-    padding: 8,
-    backgroundColor: '#f5f6f8',
-    borderRadius: 20,
-  },
-  titleText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  subtitleText: {
-    fontSize: 12,
-    color: '#6c7078',
-    marginTop: 2,
-  },
-  errorBox: {
-    backgroundColor: '#ffebeb',
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#f8c4c4',
-  },
-  errorText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#c83a3a',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  cardHeader: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#101114',
-    marginBottom: 8,
-  },
-  reloadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  reloadText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#0878f9',
-  },
-  searchBox: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    marginBottom: 12,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 12,
-    color: '#101114',
-    marginLeft: 8,
-  },
-  centerBox: {
-    paddingVertical: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mutedText: {
-    fontSize: 12,
-    color: '#6c7078',
-    marginTop: 8,
-  },
-  emptyBox: {
-    backgroundColor: '#ffffff',
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginVertical: 16,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  emptyTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#101114',
-    marginTop: 8,
-  },
-  emptyDesc: {
-    fontSize: 12,
-    color: '#6c7078',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  poCard: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  poNumberText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0878f9',
-  },
-  supplierText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#101114',
-  },
-  poMetaRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: '#f5f6f8',
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#6c7078',
-  },
-  selectPoBtn: {
-    backgroundColor: '#0878f9',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  selectPoBtnText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  selectedPoCard: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  poLabelHeader: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#0878f9',
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  selectedPoNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  changePoBtn: {
-    backgroundColor: '#f5f6f8',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  changePoBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6c7078',
-  },
-  itemCard: {
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  itemCardSelected: {
-    backgroundColor: '#ffffff',
-    borderColor: '#0878f9',
-  },
-  itemCardUnselected: {
-    backgroundColor: '#f8f9fa',
-    borderColor: '#e4e5e9',
-    opacity: 0.6,
-  },
-  itemCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f6f8',
-  },
-  itemNameText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  skuText: {
-    fontSize: 12,
-    color: '#6c7078',
-  },
-  expectedQtyBadge: {
-    backgroundColor: '#eaf3ff',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  expectedQtyText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#0878f9',
-  },
-  flexRowGap: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6c7078',
-    marginBottom: 4,
-  },
-  inputField: {
-    backgroundColor: '#f5f6f8',
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: '#101114',
-  },
-  unselectedText: {
-    fontSize: 12,
-    color: '#6c7078',
-    fontStyle: 'italic',
-    marginTop: 4,
-  },
-  totalRow: {
-    backgroundColor: '#ffffff',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  totalQtyText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#0878f9',
-  },
-  datePickerButton: {
-    backgroundColor: '#f5f6f8',
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 40,
-  },
-  datePickerText: {
-    fontSize: 14,
-    color: '#101114',
-  },
-  datePickerPlaceholder: {
-    color: '#9ca3af',
-  },
-  iosModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end',
-  },
-  iosModalContent: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 16,
-    paddingBottom: 32,
-  },
-  iosModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f6f8',
-  },
-  iosModalTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  iosModalDoneText: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#0878f9',
-  },
-  dpOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  dpContent: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  dpHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  dpTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  dpCloseBtn: {
-    padding: 6,
-    borderRadius: 16,
-    backgroundColor: '#f5f6f8',
-  },
-  dpPresetsRow: {
-    marginBottom: 12,
-  },
-  dpChip: {
-    backgroundColor: '#eaf3ff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  dpChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0878f9',
-  },
-  dpNavRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  dpNavBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#f5f6f8',
-  },
-  dpNavTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  dpWeekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 8,
-  },
-  dpWeekText: {
-    width: 36,
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#6c7078',
-  },
-  dpGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-  },
-  dpDayCell: {
-    width: '14.28%',
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 2,
-    borderRadius: 10,
-  },
-  dpDayCellSelected: {
-    backgroundColor: '#0878f9',
-  },
-  dpDayText: {
-    fontSize: 14,
-    color: '#101114',
-    fontWeight: '500',
-  },
-  dpDayTextSelected: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-});

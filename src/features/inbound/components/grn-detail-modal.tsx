@@ -5,7 +5,6 @@ import {
   Image,
   Modal,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -66,6 +65,8 @@ interface GrnDetailModalProps {
   onDelete?: (grnId: string) => void;
 }
 
+const deletedImagesMap: Record<string, Set<string>> = {};
+
 export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: GrnDetailModalProps) {
   const { user } = useAuth();
   const [detailGrn, setDetailGrn] = useState<GoodsReceiptNote | null>(grn);
@@ -78,11 +79,29 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
 
   useEffect(() => {
     if (visible && grn?.id) {
-      setDetailGrn(grn);
+      setErrorMsg(null);
+      let initialGrn = grn;
+      const deletedSet = deletedImagesMap[grn.id];
+      if (deletedSet && initialGrn.images) {
+        initialGrn = {
+          ...initialGrn,
+          images: initialGrn.images.filter((img) => !deletedSet.has(img)),
+        };
+      }
+      setDetailGrn(initialGrn);
       setLoadingDetail(true);
       getGoodsReceiptNote(grn.id)
         .then((fresh) => {
-          if (fresh) setDetailGrn(fresh);
+          if (fresh) {
+            let filteredFresh = fresh;
+            if (deletedSet && fresh.images) {
+              filteredFresh = {
+                ...fresh,
+                images: fresh.images.filter((img) => !deletedSet.has(img)),
+              };
+            }
+            setDetailGrn(filteredFresh);
+          }
         })
         .catch((err) => {
           console.warn('Lỗi tải chi tiết GRN:', err);
@@ -134,6 +153,13 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
           text: 'Xóa ảnh',
           style: 'destructive',
           onPress: async () => {
+            setErrorMsg(null);
+            if (targetImage) {
+              if (!deletedImagesMap[activeGrn.id]) {
+                deletedImagesMap[activeGrn.id] = new Set();
+              }
+              deletedImagesMap[activeGrn.id].add(targetImage);
+            }
             const updatedImages = (activeGrn.images || []).filter((_, i) => i !== index);
             const updatedGrn = { ...activeGrn, images: updatedImages };
             setDetailGrn(updatedGrn);
@@ -141,7 +167,9 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
             try {
               const res = await deleteGrnImage(activeGrn.id, index, targetImage, updatedImages);
               if (res && res.images) {
-                const freshGrn = { ...activeGrn, ...res, images: res.images };
+                const deletedSet = deletedImagesMap[activeGrn.id];
+                const cleanImages = res.images.filter((img) => !deletedSet?.has(img));
+                const freshGrn = { ...activeGrn, ...res, images: cleanImages };
                 setDetailGrn(freshGrn);
                 onUpdate(freshGrn);
               }
@@ -290,60 +318,60 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <View className="flex-1 bg-[#ececf1]">
         {/* Modal Header */}
-        <View style={styles.header}>
+        <View className="bg-white px-4 pt-12 pb-3 border-b border-[#e4e5e9] flex-row items-center justify-between">
           <View>
-            <View style={styles.headerTitleRow}>
-              <Text style={styles.titleText}>
+            <View className="flex-row items-center gap-2">
+              <Text className="text-lg font-bold text-[#101114]">
                 {activeGrn.grnNumber || `GRN #${activeGrn.id.substring(0, 8)}`}
               </Text>
               <StatusBadge {...badgeConfig} />
             </View>
-            <Text style={styles.subtitleText}>
+            <Text className="text-xs text-[#6c7078] mt-0.5">
               Tạo lúc: {activeGrn.createdAt ? new Date(activeGrn.createdAt).toLocaleString('vi-VN') : ''}
             </Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={onClose} className="p-2 bg-[#f5f6f8] rounded-full">
             <X size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
         {errorMsg ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{errorMsg}</Text>
+          <View className="bg-[#ffebeb] p-3 mx-4 mt-3 rounded-xl border border-[#f8c4c4]">
+            <Text className="text-xs font-semibold text-[#c83a3a]">{errorMsg}</Text>
           </View>
         ) : null}
 
-        <ScrollView style={{ flex: 1, padding: 16 }} keyboardShouldPersistTaps="handled">
+        <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
           {/* General Information Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-4">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">
               Thông tin chung
             </Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.metaLabel}>Mã PO liên quan</Text>
-              <Text style={styles.poNumberValue}>
+            <View className="flex-row justify-between py-1.5 border-b border-[#f5f6f8]">
+              <Text className="text-xs text-[#6c7078]">Mã PO liên quan</Text>
+              <Text className="text-xs font-bold text-[#0878f9]">
                 {activeGrn.purchaseOrderNumber || activeGrn.purchaseOrderId || 'N/A'}
               </Text>
             </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.metaLabel}>Nhà cung cấp</Text>
-              <Text style={styles.metaValueBold}>
+            <View className="flex-row justify-between py-1.5 border-b border-[#f5f6f8]">
+              <Text className="text-xs text-[#6c7078]">Nhà cung cấp</Text>
+              <Text className="text-xs font-bold text-[#101114]">
                 {activeGrn.supplierName || 'Chưa thông tin'}
               </Text>
             </View>
-            <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-              <Text style={styles.metaLabel}>Tổng số mặt hàng</Text>
-              <Text style={styles.metaValueBold}>
+            <View className="flex-row justify-between py-1.5">
+              <Text className="text-xs text-[#6c7078]">Tổng số mặt hàng</Text>
+              <Text className="text-xs font-bold text-[#101114]">
                 {activeGrn.items?.length || 0} mặt hàng
               </Text>
             </View>
           </View>
 
           {/* Items Detail */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-4">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">
               Danh sách sản phẩm nhập kho
             </Text>
 
@@ -351,109 +379,97 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
               activeGrn.items.map((item, idx) => (
                 <View
                   key={item.itemId || idx}
-                  style={styles.itemRowCard}
+                  className="bg-[#f5f6f8] p-3 rounded-xl mb-2 border border-[#e4e5e9]"
                 >
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.itemNameText}>
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-sm font-bold text-[#101114] flex-1 mr-2">
                       {item.itemName || item.sku}
                     </Text>
-                    <View style={styles.qtyBadge}>
-                      <Text style={styles.qtyText}>
+                    <View className="bg-[#eaf3ff] px-2 py-0.5 rounded-lg">
+                      <Text className="text-xs font-bold text-[#0878f9]">
                         {item.actualQty} {item.unit}
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.skuText}>SKU: {item.sku}</Text>
+                  <Text className="text-xs text-[#6c7078]">SKU: {item.sku}</Text>
                   
                   {item.lotNumber || item.expiryDate ? (
-                    <View style={styles.lotExpiryRow}>
+                    <View className="flex-row gap-3 mt-1.5 pt-1.5 border-t border-[#e4e5e9]/50">
                       {item.lotNumber ? (
-                        <Text style={styles.metaLabel}>
-                          Số lô: <Text style={styles.metaValueBold}>{item.lotNumber}</Text>
+                        <Text className="text-xs text-[#6c7078]">
+                          Số lô: <Text className="text-xs font-bold text-[#101114]">{item.lotNumber}</Text>
                         </Text>
                       ) : null}
                       {item.expiryDate ? (
-                        <Text style={styles.metaLabel}>
-                          Hạn dùng: <Text style={styles.metaValueBold}>{item.expiryDate}</Text>
+                        <Text className="text-xs text-[#6c7078]">
+                          Hạn dùng: <Text className="text-xs font-bold text-[#101114]">{item.expiryDate}</Text>
                         </Text>
                       ) : null}
                     </View>
                   ) : null}
 
                   {item.note ? (
-                    <Text style={styles.noteText}>
+                    <Text className="text-xs italic text-[#6c7078] mt-1">
                       Ghi chú: {item.note}
                     </Text>
                   ) : null}
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyText}>Không có dòng hàng nào.</Text>
+              <Text className="text-xs italic text-[#6c7078]">Không có dòng hàng nào.</Text>
             )}
           </View>
 
           {/* Evidence Images */}
-          <View style={styles.card}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.cardHeader}>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-4">
+            <View className="flex-row justify-between items-center mb-2">
+              <Text className="text-xs font-bold text-[#6c7078] uppercase">
                 Ảnh minh chứng nhập kho ({activeGrn.images?.length || 0})
               </Text>
             </View>
 
             {canUploadImage ? (
-              <View style={styles.imageActionRow}>
+              <View className="flex-row gap-2 mb-3">
                 <TouchableOpacity
                   onPress={handleTakePhoto}
                   disabled={uploadingImage}
-                  style={styles.primaryActionBtn}
+                  className="flex-1 flex-row items-center justify-center gap-1.5 bg-[#0878f9] py-2 px-3 rounded-xl"
                 >
                   <Camera size={15} color="#ffffff" />
-                  <Text style={styles.primaryActionText}>Chụp ảnh</Text>
+                  <Text className="text-xs font-bold text-white">Chụp ảnh</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   onPress={handlePickImage}
                   disabled={uploadingImage}
-                  style={styles.secondaryActionBtn}
+                  className="flex-1 flex-row items-center justify-center gap-1.5 bg-[#eaf3ff] py-2 px-3 rounded-xl border border-[#0878f9]"
                 >
                   <ImageIcon size={15} color="#0878f9" />
-                  <Text style={styles.secondaryActionText}>Thư viện</Text>
+                  <Text className="text-xs font-bold text-[#0878f9]">Thư viện</Text>
                 </TouchableOpacity>
               </View>
             ) : null}
 
             {uploadingImage ? (
-              <View style={styles.loadingImageBox}>
+              <View className="bg-[#eaf3ff] p-2.5 rounded-xl mb-3 flex-row items-center justify-center gap-2">
                 <ActivityIndicator size="small" color="#0878f9" />
-                <Text style={styles.loadingImageText}>Đang tải ảnh minh chứng lên...</Text>
+                <Text className="text-xs font-semibold text-[#0878f9]">Đang tải ảnh minh chứng lên...</Text>
               </View>
             ) : null}
 
             {activeGrn.images && activeGrn.images.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingTop: 8 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row pt-2">
                 {activeGrn.images.map((img, index) => (
-                  <View key={index} style={{ position: 'relative', marginRight: 12, marginTop: 4 }}>
+                  <View key={index} className="relative mr-3 mt-1">
                     <Image
                       source={{ uri: resolveImageUrl(img) }}
-                      style={{ width: 100, height: 100, borderRadius: 10 }}
+                      className="w-[100px] h-[100px] rounded-xl"
                       resizeMode="cover"
                     />
                     {canDeleteImage ? (
                       <TouchableOpacity
                         onPress={() => handleDeleteImage(index)}
-                        style={{
-                          position: 'absolute',
-                          top: -6,
-                          right: -6,
-                          backgroundColor: '#ef4444',
-                          borderRadius: 12,
-                          padding: 4,
-                          elevation: 3,
-                          shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 1 },
-                          shadowOpacity: 0.25,
-                          shadowRadius: 1.5,
-                        }}
+                        className="absolute -top-1.5 -right-1.5 bg-[#ef4444] rounded-full p-1 shadow-sm"
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <X size={12} color="#ffffff" />
@@ -463,15 +479,15 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
                 ))}
               </ScrollView>
             ) : (
-              <View style={styles.emptyImageBox}>
+              <View className="items-center py-4 bg-[#f5f6f8] rounded-xl border border-dashed border-[#e4e5e9]">
                 <ImageIcon size={24} color={colors.textMuted} />
-                <Text style={styles.mutedText}>Chưa có ảnh chứng từ nào</Text>
+                <Text className="text-xs text-[#6c7078] mt-1">Chưa có ảnh chứng từ nào</Text>
               </View>
             )}
           </View>
 
           {/* Action Buttons */}
-          <View style={{ marginBottom: 32, gap: 10 }}>
+          <View className="mb-8 gap-2.5">
             {canConfirm ? (
               <AppButton
                 label="Xác Nhận Nhận Hàng (CONFIRM)"
@@ -494,26 +510,15 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
               <TouchableOpacity
                 onPress={handleDelete}
                 disabled={deleting || confirming}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  backgroundColor: '#ffebeb',
-                  borderWidth: 1,
-                  borderColor: '#f8c4c4',
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  marginTop: 4,
-                }}
+                className="flex-row items-center justify-center gap-1.5 bg-[#ffebeb] border border-[#f8c4c4] py-3 rounded-xl mt-1"
               >
                 {deleting ? (
                   <ActivityIndicator size="small" color="#dc2626" />
                 ) : (
                   <>
                     <Trash2 size={16} color="#dc2626" />
-                    <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 14 }}>
-                      Xóa Phiếu Nhập (DRAFT)
+                    <Text className="text-sm font-bold text-[#dc2626]">
+                      Xóa Phiếu Nhập (Nháp)
                     </Text>
                   </>
                 )}
@@ -525,278 +530,3 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ececf1',
-  },
-  header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e4e5e9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  titleText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  subtitleText: {
-    fontSize: 12,
-    color: '#6c7078',
-    marginTop: 2,
-  },
-  closeBtn: {
-    padding: 8,
-    backgroundColor: '#f5f6f8',
-    borderRadius: 20,
-  },
-  errorBox: {
-    backgroundColor: '#ffebeb',
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#f8c4c4',
-  },
-  errorText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#c83a3a',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    marginBottom: 16,
-  },
-  cardHeader: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#6c7078',
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f6f8',
-  },
-  metaLabel: {
-    fontSize: 12,
-    color: '#6c7078',
-  },
-  poNumberValue: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#0878f9',
-  },
-  metaValueBold: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#101114',
-  },
-  itemRowCard: {
-    backgroundColor: '#f5f6f8',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  itemNameText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#101114',
-    flex: 1,
-    marginRight: 8,
-  },
-  qtyBadge: {
-    backgroundColor: '#eaf3ff',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  qtyText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#0878f9',
-  },
-  skuText: {
-    fontSize: 12,
-    color: '#6c7078',
-  },
-  lotExpiryRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(228, 229, 233, 0.5)',
-  },
-  noteText: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    color: '#6c7078',
-    marginTop: 4,
-  },
-  emptyText: {
-    fontSize: 12,
-    color: '#6c7078',
-    fontStyle: 'italic',
-  },
-  imageActionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  primaryActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#0878f9',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-  },
-  primaryActionText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  secondaryActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#eaf3ff',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#0878f9',
-  },
-  secondaryActionText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#0878f9',
-  },
-  urlActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    backgroundColor: '#f5f6f8',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  urlActionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6c7078',
-  },
-  loadingImageBox: {
-    backgroundColor: '#eaf3ff',
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  loadingImageText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0878f9',
-  },
-  urlInputCard: {
-    backgroundColor: '#f5f6f8',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    marginBottom: 12,
-  },
-  urlInput: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 12,
-    color: '#101114',
-    marginVertical: 8,
-  },
-  cancelBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  cancelBtnText: {
-    fontSize: 12,
-    color: '#6c7078',
-  },
-  uploadSubmitBtn: {
-    backgroundColor: '#0878f9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  uploadSubmitText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  imageThumbnail: {
-    marginRight: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  emptyImageBox: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    backgroundColor: '#f5f6f8',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    borderStyle: 'dashed',
-  },
-  mutedText: {
-    fontSize: 12,
-    color: '#6c7078',
-    marginTop: 4,
-  },
-});

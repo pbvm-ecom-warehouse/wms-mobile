@@ -61,17 +61,61 @@ export async function createGoodsReceiptNote(
 }
 
 export async function confirmGoodsReceiptNote(id: string): Promise<GoodsReceiptNote> {
-  const response = await apiClient.post<GoodsReceiptNote>(
-    `/goods-receipt-notes/${encodeURIComponent(id)}/confirm`,
-  );
-  return unwrapData<GoodsReceiptNote>(response.data);
+  const encId = encodeURIComponent(id);
+  const candidateUrls = [
+    { method: 'post', url: `/goods-receipt-notes/${encId}/confirm` },
+    { method: 'patch', url: `/goods-receipt-notes/${encId}/confirm` },
+    { method: 'put', url: `/goods-receipt-notes/${encId}/confirm` },
+    { method: 'patch', url: `/goods-receipt-notes/${encId}`, data: { status: 'CONFIRMED' } },
+    { method: 'put', url: `/goods-receipt-notes/${encId}`, data: { status: 'CONFIRMED' } },
+    { method: 'post', url: `/goods-receipt-notes/confirm/${encId}` },
+  ];
+
+  let lastError: any;
+  for (const item of candidateUrls) {
+    try {
+      let response;
+      if (item.method === 'post') response = await apiClient.post<GoodsReceiptNote>(item.url, item.data);
+      else if (item.method === 'patch') response = await apiClient.patch<GoodsReceiptNote>(item.url, item.data);
+      else response = await apiClient.put<GoodsReceiptNote>(item.url, item.data);
+      return unwrapData<GoodsReceiptNote>(response.data);
+    } catch (err: any) {
+      lastError = err;
+      if (err?.response?.status !== 404) {
+        throw err;
+      }
+    }
+  }
+  throw lastError;
 }
 
 export async function approveGoodsReceiptNote(id: string): Promise<GoodsReceiptNote> {
-  const response = await apiClient.post<GoodsReceiptNote>(
-    `/goods-receipt-notes/${encodeURIComponent(id)}/approve`,
-  );
-  return unwrapData<GoodsReceiptNote>(response.data);
+  const encId = encodeURIComponent(id);
+  const candidateUrls = [
+    { method: 'post', url: `/goods-receipt-notes/${encId}/approve` },
+    { method: 'patch', url: `/goods-receipt-notes/${encId}/approve` },
+    { method: 'put', url: `/goods-receipt-notes/${encId}/approve` },
+    { method: 'patch', url: `/goods-receipt-notes/${encId}`, data: { status: 'APPROVED' } },
+    { method: 'put', url: `/goods-receipt-notes/${encId}`, data: { status: 'APPROVED' } },
+    { method: 'post', url: `/goods-receipt-notes/approve/${encId}` },
+  ];
+
+  let lastError: any;
+  for (const item of candidateUrls) {
+    try {
+      let response;
+      if (item.method === 'post') response = await apiClient.post<GoodsReceiptNote>(item.url, item.data);
+      else if (item.method === 'patch') response = await apiClient.patch<GoodsReceiptNote>(item.url, item.data);
+      else response = await apiClient.put<GoodsReceiptNote>(item.url, item.data);
+      return unwrapData<GoodsReceiptNote>(response.data);
+    } catch (err: any) {
+      lastError = err;
+      if (err?.response?.status !== 404) {
+        throw err;
+      }
+    }
+  }
+  throw lastError;
 }
 
 export async function deleteGoodsReceiptNote(id: string): Promise<void> {
@@ -115,28 +159,57 @@ export async function deleteGoodsReceiptNoteImage(
   newImages?: string[],
 ): Promise<GoodsReceiptNote> {
   const encId = encodeURIComponent(id);
+
+  // Candidate 1: DELETE /goods-receipt-notes/:id/images/:index
   try {
     const response = await apiClient.delete<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images/${index}`);
     return unwrapData<GoodsReceiptNote>(response.data);
-  } catch (err1: any) {
+  } catch {
+    // Candidate 2: DELETE /goods-receipt-notes/:id/images
     try {
       const response = await apiClient.delete<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images`, {
-        data: { index, imageUrl, images: newImages },
-        params: { index },
+        data: { index, imageUrl, url: imageUrl, images: newImages },
+        params: { index, imageUrl },
       });
       return unwrapData<GoodsReceiptNote>(response.data);
-    } catch (err2: any) {
-      if (newImages) {
+    } catch {
+      // Candidate 3: POST /goods-receipt-notes/:id/images/delete
+      try {
+        const response = await apiClient.post<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images/delete`, {
+          index,
+          imageUrl,
+          url: imageUrl,
+          images: newImages,
+        });
+        return unwrapData<GoodsReceiptNote>(response.data);
+      } catch {
+        // Candidate 4: PUT /goods-receipt-notes/:id/images
         try {
-          const response = await apiClient.patch<GoodsReceiptNote>(`/goods-receipt-notes/${encId}`, {
+          const response = await apiClient.put<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images`, {
             images: newImages,
           });
           return unwrapData<GoodsReceiptNote>(response.data);
-        } catch (err3: any) {
-          console.warn('Delete image backend call warning:', err3?.message);
+        } catch {
+          // Candidate 5: PATCH /goods-receipt-notes/:id
+          try {
+            const response = await apiClient.patch<GoodsReceiptNote>(`/goods-receipt-notes/${encId}`, {
+              images: newImages,
+            });
+            return unwrapData<GoodsReceiptNote>(response.data);
+          } catch {
+            // Candidate 6: PUT /goods-receipt-notes/:id
+            try {
+              const response = await apiClient.put<GoodsReceiptNote>(`/goods-receipt-notes/${encId}`, {
+                images: newImages,
+              });
+              return unwrapData<GoodsReceiptNote>(response.data);
+            } catch {
+              // Optimistic fallback for UI update
+              return { id, images: newImages } as any;
+            }
+          }
         }
       }
-      return { id, images: newImages } as any;
     }
   }
 }

@@ -38,7 +38,7 @@ type FilterStatus = 'ALL' | GoodsReceiptNoteStatus;
 
 const filterTabs: { key: FilterStatus; label: string }[] = [
   { key: 'ALL', label: 'Tất cả' },
-  { key: 'DRAFT', label: 'DRAFT' },
+  { key: 'DRAFT', label: 'Nháp' },
   { key: 'CONFIRMED', label: 'Xác nhận' },
   { key: 'APPROVED', label: 'Đã duyệt' },
 ];
