@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Package } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
 import { AppHeader, EmptyState, ListRow, Screen, SearchField, Surface } from '@/shared/ui';
 import { listProducts, type WarehouseItem } from '../api/products-api';
+import { ProductDetailModal } from '../components/product-detail-modal';
 
 export function ProductsScreen() {
   const [items, setItems] = useState<WarehouseItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<WarehouseItem | null>(null);
 
   const fetchItems = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -62,13 +64,18 @@ export function ProductsScreen() {
             {filtered.map((item) => {
               const qty = item.availableQty ?? item.quantityOnHand ?? 0;
               return (
-                <ListRow
+                <TouchableOpacity
                   key={item.id}
-                  icon={<Package size={19} color={colors.primary} />}
-                  title={item.name || item.sku}
-                  subtitle={`${item.sku} · ${item.location || 'Kho chính'}`}
-                  meta={`${qty.toLocaleString('vi-VN')} ${item.unit || 'Cái'}`}
-                />
+                  onPress={() => setSelectedProduct(item)}
+                  activeOpacity={0.7}
+                >
+                  <ListRow
+                    icon={<Package size={19} color={colors.primary} />}
+                    title={item.name || item.sku}
+                    subtitle={`${item.sku} · ${item.location || 'Kho chính'}`}
+                    meta={`${qty.toLocaleString('vi-VN')} ${item.unit || 'Cái'}`}
+                  />
+                </TouchableOpacity>
               );
             })}
           </Surface>
@@ -85,6 +92,13 @@ export function ProductsScreen() {
           />
         )}
       </ScrollView>
+
+      {/* Stock Item Detail Modal */}
+      <ProductDetailModal
+        visible={Boolean(selectedProduct)}
+        item={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+      />
     </Screen>
   );
 }

@@ -4,13 +4,28 @@ export interface WarehouseItem {
   id: string;
   sku: string;
   name: string;
-  type: string;
-  unit: string;
+  type?: string;
+  unit?: string;
   quantityOnHand?: number;
   availableQty?: number;
   allocatedQty?: number;
   location?: string;
   barcode?: string;
+  minStock?: number;
+  maxStock?: number;
+  reorderPoint?: number;
+  supplierName?: string;
+  supplierCode?: string;
+  lotNumber?: string;
+  expiryDate?: string;
+  description?: string;
+  category?: string;
+  categoryName?: string;
+  price?: number;
+  status?: string;
+  images?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface ApiListResponse<T> {
@@ -30,4 +45,9 @@ export async function listProducts(): Promise<WarehouseItem[]> {
     return (unwrapped as ApiListResponse<WarehouseItem>).data;
   }
   return [];
+}
+
+export async function getProductDetail(id: string): Promise<WarehouseItem> {
+  const response = await apiClient.get<WarehouseItem>(`/stock/items/${encodeURIComponent(id)}`);
+  return unwrapData<WarehouseItem>(response.data);
 }
