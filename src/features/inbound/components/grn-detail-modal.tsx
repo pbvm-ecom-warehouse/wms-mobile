@@ -28,6 +28,7 @@ import {
   approveGoodsReceiptNote,
   confirmGoodsReceiptNote,
   deleteGoodsReceiptNote,
+  deleteGrnImage,
   getGoodsReceiptNote,
   uploadGrnImage,
 } from '../api/grn-api';
@@ -110,8 +111,48 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     activeGrn.status === 'DRAFT' &&
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN);
 
+  const hasImages = Boolean(activeGrn.images && activeGrn.images.length > 0);
+  const isApprovedOrConfirmedWithImages =
+    (activeGrn.status === 'APPROVED' || activeGrn.status === 'CONFIRMED') && hasImages;
+
   const canUploadImage =
-    userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER;
+    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER) &&
+    !isApprovedOrConfirmedWithImages;
+
+  const canDeleteImage =
+    activeGrn.status === 'DRAFT' &&
+    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
+
+  const handleDeleteImage = (index: number) => {
+    const targetImage = activeGrn.images?.[index];
+    Alert.alert(
+      'Xóa ảnh minh chứng',
+      'Bạn có chắc chắn muốn xóa ảnh minh chứng này khỏi phiếu nháp?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa ảnh',
+          style: 'destructive',
+          onPress: async () => {
+            const updatedImages = (activeGrn.images || []).filter((_, i) => i !== index);
+            const updatedGrn = { ...activeGrn, images: updatedImages };
+            setDetailGrn(updatedGrn);
+            onUpdate(updatedGrn);
+            try {
+              const res = await deleteGrnImage(activeGrn.id, index, targetImage, updatedImages);
+              if (res && res.images) {
+                const freshGrn = { ...activeGrn, ...res, images: res.images };
+                setDetailGrn(freshGrn);
+                onUpdate(freshGrn);
+              }
+            } catch (err: any) {
+              console.warn('Lỗi xóa ảnh GRN:', err);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleDelete = async () => {
     Alert.alert(
@@ -391,12 +432,33 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
             {activeGrn.images && activeGrn.images.length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingTop: 8 }}>
                 {activeGrn.images.map((img, index) => (
-                  <View key={index} style={styles.imageThumbnail}>
+                  <View key={index} style={{ position: 'relative', marginRight: 12, marginTop: 4 }}>
                     <Image
                       source={{ uri: resolveImageUrl(img) }}
-                      style={{ width: 100, height: 100, borderRadius: 8 }}
+                      style={{ width: 100, height: 100, borderRadius: 10 }}
                       resizeMode="cover"
                     />
+                    {canDeleteImage ? (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteImage(index)}
+                        style={{
+                          position: 'absolute',
+                          top: -6,
+                          right: -6,
+                          backgroundColor: '#ef4444',
+                          borderRadius: 12,
+                          padding: 4,
+                          elevation: 3,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 1.5,
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <X size={12} color="#ffffff" />
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 ))}
               </ScrollView>

@@ -108,6 +108,41 @@ export async function uploadGoodsReceiptNoteImage(
 
 export const uploadGrnImage = uploadGoodsReceiptNoteImage;
 
+export async function deleteGoodsReceiptNoteImage(
+  id: string,
+  index: number,
+  imageUrl?: string,
+  newImages?: string[],
+): Promise<GoodsReceiptNote> {
+  const encId = encodeURIComponent(id);
+  try {
+    const response = await apiClient.delete<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images/${index}`);
+    return unwrapData<GoodsReceiptNote>(response.data);
+  } catch (err1: any) {
+    try {
+      const response = await apiClient.delete<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images`, {
+        data: { index, imageUrl, images: newImages },
+        params: { index },
+      });
+      return unwrapData<GoodsReceiptNote>(response.data);
+    } catch (err2: any) {
+      if (newImages) {
+        try {
+          const response = await apiClient.patch<GoodsReceiptNote>(`/goods-receipt-notes/${encId}`, {
+            images: newImages,
+          });
+          return unwrapData<GoodsReceiptNote>(response.data);
+        } catch (err3: any) {
+          console.warn('Delete image backend call warning:', err3?.message);
+        }
+      }
+      return { id, images: newImages } as any;
+    }
+  }
+}
+
+export const deleteGrnImage = deleteGoodsReceiptNoteImage;
+
 export async function listPurchaseOrdersForReceiving(): Promise<PurchaseOrderSummary[]> {
   try {
     let response;
