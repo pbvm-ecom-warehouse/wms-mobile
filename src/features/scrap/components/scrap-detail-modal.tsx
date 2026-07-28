@@ -5,7 +5,6 @@ import {
   Image,
   Modal,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -146,38 +145,38 @@ export function ScrapDetailModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <View className="flex-1 bg-[#ececf1]">
         {/* Header */}
-        <View style={styles.header}>
+        <View className="bg-white px-4 pt-12 pb-3 border-b border-[#e4e5e9] flex-row items-center justify-between">
           <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.titleText}>
+            <View className="flex-row items-center gap-2">
+              <Text className="text-lg font-bold text-[#101114]">
                 Phiếu Hủy #{activeNote.id.substring(0, 8).toUpperCase()}
               </Text>
               <StatusBadge {...badgeConfig} />
             </View>
-            <Text style={styles.subtitleText}>
+            <Text className="text-xs text-[#6c7078] mt-0.5">
               Tạo bởi: {activeNote.createdBy || 'N/A'} ·{' '}
               {new Date(activeNote.createdAt).toLocaleString('vi-VN')}
             </Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={onClose} className="p-2 bg-[#f5f6f8] rounded-full">
             <X size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
         {errorMsg ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{errorMsg}</Text>
+          <View className="bg-[#ffebeb] p-3 mx-4 mt-3 rounded-xl border border-[#f8c4c4]">
+            <Text className="text-xs font-semibold text-[#c83a3a]">{errorMsg}</Text>
           </View>
         ) : null}
 
-        <ScrollView style={{ flex: 1, padding: 16 }} keyboardShouldPersistTaps="handled">
+        <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
           {/* Reject Reason Box if Rejected */}
           {activeNote.status === 'REJECTED' && activeNote.rejectReason ? (
-            <View style={[styles.card, { backgroundColor: '#ffebeb', borderColor: '#f8c4c4' }]}>
-              <Text style={[styles.cardHeader, { color: '#dc2626' }]}>Lý do từ chối:</Text>
-              <Text style={{ fontSize: 13, color: '#991b1b', fontWeight: '500' }}>
+            <View className="bg-[#ffebeb] border border-[#f8c4c4] p-4 rounded-2xl mb-3">
+              <Text className="text-xs font-bold text-[#dc2626] uppercase mb-1">Lý do từ chối:</Text>
+              <Text className="text-xs text-[#991b1b] font-semibold">
                 {activeNote.rejectReason}
               </Text>
             </View>
@@ -185,72 +184,72 @@ export function ScrapDetailModal({
 
           {/* General Note */}
           {activeNote.note ? (
-            <View style={styles.card}>
-              <Text style={styles.cardHeader}>Ghi chú chung</Text>
-              <Text style={{ fontSize: 13, color: '#101114' }}>{activeNote.note}</Text>
+            <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
+              <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">Ghi chú chung</Text>
+              <Text className="text-xs text-[#101114]">{activeNote.note}</Text>
             </View>
           ) : null}
 
           {/* Items List */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>Danh sách mặt hàng hủy</Text>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">Danh sách mặt hàng hủy</Text>
             {activeNote.items && activeNote.items.length > 0 ? (
               activeNote.items.map((item, idx) => (
-                <View key={idx} style={styles.itemBox}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.itemName}>
+                <View key={idx} className="bg-[#f5f6f8] p-3 rounded-xl mb-2 border border-[#e4e5e9]">
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-sm font-bold text-[#101114]">
                       {item.itemName || item.sku || `Mặt hàng #${idx + 1}`}
                     </Text>
-                    <View style={styles.qtyBadge}>
-                      <Text style={styles.qtyText}>Hủy {item.quantity}</Text>
+                    <View className="bg-[#ffebeb] px-2 py-0.5 rounded-lg border border-[#f8c4c4]">
+                      <Text className="text-xs font-bold text-[#dc2626]">Hủy {item.quantity}</Text>
                     </View>
                   </View>
 
-                  <Text style={styles.subText}>
-                    Kệ / Shelf: <Text style={styles.boldText}>{item.shelfId || item.shelfCode || 'N/A'}</Text>
+                  <Text className="text-xs text-[#6c7078] mt-1">
+                    Kệ / Shelf: <Text className="font-bold text-[#101114]">{item.shelfId || item.shelfCode || 'N/A'}</Text>
                   </Text>
                   {item.lotId || item.lotNumber ? (
-                    <Text style={styles.subText}>
-                      Lô / Lot: <Text style={styles.boldText}>{item.lotNumber || item.lotId}</Text>
+                    <Text className="text-xs text-[#6c7078]">
+                      Lô / Lot: <Text className="font-bold text-[#101114]">{item.lotNumber || item.lotId}</Text>
                     </Text>
                   ) : null}
 
-                  <Text style={[styles.subText, { marginTop: 4 }]}>
-                    Lý do hủy: <Text style={{ color: '#dc2626', fontWeight: 'bold' }}>{item.reason}</Text>
+                  <Text className="text-xs text-[#6c7078] mt-1">
+                    Lý do hủy: <Text className="text-[#dc2626] font-bold">{item.reason}</Text>
                   </Text>
                 </View>
               ))
             ) : (
-              <Text style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>Không có thông tin dòng hàng</Text>
+              <Text className="text-xs text-[#9ca3af] italic">Không có thông tin dòng hàng</Text>
             )}
           </View>
 
           {/* Evidence Images */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>Ảnh minh chứng ({allImages.length})</Text>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">Ảnh minh chứng ({allImages.length})</Text>
             {allImages.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingTop: 6 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row pt-1.5">
                 {allImages.map((img, idx) => (
-                  <View key={idx} style={{ marginRight: 12 }}>
+                  <View key={idx} className="mr-3">
                     <Image
                       source={{ uri: resolveImageUrl(img) }}
-                      style={{ width: 100, height: 100, borderRadius: 10 }}
+                      className="w-[100px] h-[100px] rounded-xl"
                       resizeMode="cover"
                     />
                   </View>
                 ))}
               </ScrollView>
             ) : (
-              <View style={styles.emptyImageBox}>
+              <View className="items-center py-4 bg-[#f5f6f8] rounded-xl border border-dashed border-[#e4e5e9]">
                 <ImageIcon size={24} color={colors.textMuted} />
-                <Text style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Chưa có ảnh chứng từ hủy</Text>
+                <Text className="text-xs text-[#9ca3af] mt-1">Chưa có ảnh chứng từ hủy</Text>
               </View>
             )}
           </View>
 
           {/* Manager / Admin Action Buttons */}
           {canApproveOrReject ? (
-            <View style={{ marginBottom: 32, gap: 10 }}>
+            <View className="mb-8 gap-2.5">
               <AppButton
                 label="Duyệt Phiếu Hủy (Trừ Tồn Thật)"
                 loading={approving}
@@ -262,35 +261,35 @@ export function ScrapDetailModal({
                 <TouchableOpacity
                   onPress={() => setShowRejectInput(true)}
                   disabled={approving || rejecting}
-                  style={styles.rejectBtn}
+                  className="flex-row items-center justify-center gap-1.5 bg-[#ffebeb] border border-[#f8c4c4] py-3 rounded-xl"
                 >
                   <XCircle size={16} color="#dc2626" />
-                  <Text style={styles.rejectBtnText}>Từ Chối Phiếu Hủy</Text>
+                  <Text className="text-sm font-bold text-[#dc2626]">Từ Chối Phiếu Hủy</Text>
                 </TouchableOpacity>
               ) : (
-                <View style={styles.rejectFormCard}>
-                  <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#dc2626', marginBottom: 6 }}>
+                <View className="bg-[#ffebeb] border border-[#f8c4c4] p-3 rounded-xl">
+                  <Text className="text-xs font-bold text-[#dc2626] mb-1.5">
                     Nhập lý do từ chối:
                   </Text>
                   <TextInput
-                    style={styles.rejectInput}
+                    className="bg-white border border-[#f8c4c4] rounded-xl px-3 py-2 text-xs text-[#101114]"
                     value={rejectReason}
                     onChangeText={setRejectReason}
                     placeholder="VD: Không đúng quy trình, hàng chưa kiểm tra..."
                   />
-                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+                  <View className="flex-row justify-end gap-2 mt-2">
                     <TouchableOpacity
                       onPress={() => setShowRejectInput(false)}
-                      style={styles.cancelBtn}
+                      className="bg-white border border-[#e4e5e9] px-3 py-1.5 rounded-xl"
                     >
-                      <Text style={styles.cancelText}>Hủy</Text>
+                      <Text className="text-xs font-bold text-[#6c7078]">Hủy</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={handleConfirmReject}
                       disabled={rejecting}
-                      style={styles.submitRejectBtn}
+                      className="bg-[#dc2626] px-3 py-1.5 rounded-xl"
                     >
-                      <Text style={styles.submitRejectText}>
+                      <Text className="text-xs font-bold text-white">
                         {rejecting ? 'Đang từ chối...' : 'Xác nhận Từ Chối'}
                       </Text>
                     </TouchableOpacity>
@@ -304,88 +303,3 @@ export function ScrapDetailModal({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ececf1' },
-  header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e4e5e9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  titleText: { fontSize: 17, fontWeight: 'bold', color: '#101114' },
-  subtitleText: { fontSize: 12, color: '#6c7078', marginTop: 2 },
-  closeBtn: { padding: 8, backgroundColor: '#f5f6f8', borderRadius: 20 },
-  errorBox: {
-    backgroundColor: '#ffebeb',
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#f8c4c4',
-  },
-  errorText: { fontSize: 12, fontWeight: '600', color: '#c83a3a' },
-  card: {
-    backgroundColor: '#ffffff',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    marginBottom: 12,
-  },
-  cardHeader: { fontSize: 14, fontWeight: 'bold', color: '#101114', marginBottom: 8 },
-  itemBox: {
-    backgroundColor: '#f8f9fa',
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    marginBottom: 8,
-  },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  itemName: { fontSize: 13, fontWeight: 'bold', color: '#101114', flex: 1, marginRight: 8 },
-  qtyBadge: { backgroundColor: '#ffebeb', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  qtyText: { fontSize: 12, fontWeight: 'bold', color: '#dc2626' },
-  subText: { fontSize: 12, color: '#6c7078', marginTop: 2 },
-  boldText: { color: '#101114', fontWeight: '600' },
-  emptyImageBox: { paddingVertical: 20, alignItems: 'center', justifyContent: 'center' },
-  rejectBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#ffebeb',
-    borderWidth: 1,
-    borderColor: '#f8c4c4',
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  rejectBtnText: { color: '#dc2626', fontWeight: 'bold', fontSize: 14 },
-  rejectFormCard: {
-    backgroundColor: '#ffebeb',
-    borderWidth: 1,
-    borderColor: '#f8c4c4',
-    padding: 12,
-    borderRadius: 12,
-  },
-  rejectInput: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 13,
-    color: '#101114',
-    borderWidth: 1,
-    borderColor: '#f8c4c4',
-  },
-  cancelBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#ffffff' },
-  cancelText: { fontSize: 12, color: '#6c7078', fontWeight: '600' },
-  submitRejectBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#dc2626' },
-  submitRejectText: { fontSize: 12, color: '#ffffff', fontWeight: 'bold' },
-});

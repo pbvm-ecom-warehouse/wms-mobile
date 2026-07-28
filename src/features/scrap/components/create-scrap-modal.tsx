@@ -5,14 +5,13 @@ import {
   Image,
   Modal,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, CheckCircle2, ImageIcon, Plus, Trash2, X } from 'lucide-react-native';
+import { Camera, CheckCircle2, ImageIcon, X } from 'lucide-react-native';
 import { listProducts, type WarehouseItem } from '@/features/products/api/products-api';
 import { colors } from '@/shared/theme/tokens';
 import { AppButton } from '@/shared/ui';
@@ -23,16 +22,6 @@ interface CreateScrapModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess: (created: ScrapNote) => void;
-}
-
-interface DraftScrapItem {
-  itemId: string;
-  itemName: string;
-  sku: string;
-  shelfId: string;
-  lotId?: string;
-  quantity: string;
-  reason: string;
 }
 
 export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapModalProps) {
@@ -177,31 +166,31 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <View className="flex-1 bg-[#ececf1]">
         {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Tạo Phiếu Đề Xuất Hủy Hàng</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+        <View className="bg-white px-4 pt-12 pb-3 border-b border-[#e4e5e9] flex-row items-center justify-between">
+          <Text className="text-lg font-bold text-[#101114]">Tạo Phiếu Đề Xuất Hủy Hàng</Text>
+          <TouchableOpacity onPress={onClose} className="p-2 bg-[#f5f6f8] rounded-full">
             <X size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
         {errorMsg ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{errorMsg}</Text>
+          <View className="bg-[#ffebeb] p-3 mx-4 mt-3 rounded-xl border border-[#f8c4c4]">
+            <Text className="text-xs font-semibold text-[#c83a3a]">{errorMsg}</Text>
           </View>
         ) : null}
 
-        <ScrollView style={{ flex: 1, padding: 16 }} keyboardShouldPersistTaps="handled">
+        <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
           {/* Card: Product Selection */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>Sản phẩm cần hủy</Text>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">Sản phẩm cần hủy</Text>
 
             <TouchableOpacity
               onPress={() => setShowProductDropdown(!showProductDropdown)}
-              style={styles.selectBtn}
+              className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2.5"
             >
-              <Text style={styles.selectBtnText}>
+              <Text className="text-xs font-semibold text-[#101114]">
                 {selectedProduct
                   ? `${selectedProduct.name} (SKU: ${selectedProduct.sku})`
                   : 'Bấm chọn sản phẩm'}
@@ -209,17 +198,17 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
             </TouchableOpacity>
 
             {showProductDropdown ? (
-              <View style={styles.dropdownBox}>
+              <View className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl p-2.5 mt-2">
                 <TextInput
-                  style={styles.searchInput}
+                  className="bg-white border border-[#e4e5e9] rounded-lg px-3 py-1.5 text-xs text-[#101114] mb-2"
                   placeholder="Tìm sản phẩm theo tên hoặc SKU..."
                   value={searchProduct}
                   onChangeText={setSearchProduct}
                 />
                 {loadingProducts ? (
-                  <ActivityIndicator size="small" color="#0878f9" style={{ marginVertical: 12 }} />
+                  <ActivityIndicator size="small" color="#0878f9" className="my-3" />
                 ) : filteredProducts.length > 0 ? (
-                  <ScrollView style={{ maxHeight: 180 }}>
+                  <ScrollView className="max-h-[180px]">
                     {filteredProducts.map((p) => (
                       <TouchableOpacity
                         key={p.id}
@@ -227,26 +216,26 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
                           setSelectedProduct(p);
                           setShowProductDropdown(false);
                         }}
-                        style={styles.dropdownItem}
+                        className="py-2 px-1 border-b border-[#e4e5e9]/50"
                       >
-                        <Text style={styles.dropdownItemTitle}>{p.name}</Text>
-                        <Text style={styles.dropdownItemSub}>
+                        <Text className="text-xs font-bold text-[#101114]">{p.name}</Text>
+                        <Text className="text-[11px] text-[#6c7078]">
                           SKU: {p.sku} · Tồn: {p.quantityOnHand ?? 0} {p.unit || 'cái'}
                         </Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
                 ) : (
-                  <Text style={styles.emptyText}>Không tìm thấy sản phẩm nào</Text>
+                  <Text className="text-xs text-[#6c7078] italic my-2">Không tìm thấy sản phẩm nào</Text>
                 )}
               </View>
             ) : null}
 
-            <View style={{ marginTop: 12, flexDirection: 'row', gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>Số lượng hủy *</Text>
+            <View className="mt-3 flex-row gap-3">
+              <View className="flex-1">
+                <Text className="text-xs font-semibold text-[#6c7078] mb-1">Số lượng hủy *</Text>
                 <TextInput
-                  style={styles.input}
+                  className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                   keyboardType="numeric"
                   value={quantity}
                   onChangeText={setQuantity}
@@ -254,10 +243,10 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
                 />
               </View>
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>Vị trí / Kệ hàng (Shelf) *</Text>
+              <View className="flex-1">
+                <Text className="text-xs font-semibold text-[#6c7078] mb-1">Vị trí / Kệ hàng (Shelf) *</Text>
                 <TextInput
-                  style={styles.input}
+                  className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                   value={shelfId}
                   onChangeText={setShelfId}
                   placeholder="SHELF-01"
@@ -265,10 +254,10 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
               </View>
             </View>
 
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.fieldLabel}>Lý do hủy hàng *</Text>
+            <View className="mt-3">
+              <Text className="text-xs font-semibold text-[#6c7078] mb-1">Lý do hủy hàng *</Text>
               <TextInput
-                style={styles.input}
+                className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                 value={reason}
                 onChangeText={setReason}
                 placeholder="Hàng bị hỏng, bể vỡ hoặc hết hạn..."
@@ -277,11 +266,12 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
           </View>
 
           {/* Card: General Note */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>Ghi chú chung</Text>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">Ghi chú chung</Text>
             <TextInput
-              style={[styles.input, { height: 70, textAlignVertical: 'top', paddingTop: 8 }]}
+              className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114] h-[70px]"
               multiline
+              textAlignVertical="top"
               value={generalNote}
               onChangeText={setGeneralNote}
               placeholder="Nhập ghi chú đề xuất (nếu có)..."
@@ -289,38 +279,37 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
           </View>
 
           {/* Card: Evidence Images */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">
               Ảnh minh chứng hủy ({evidenceImages.length})
             </Text>
 
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 8 }}>
-              <TouchableOpacity onPress={handleTakePhoto} style={styles.camBtn}>
+            <View className="flex-row gap-2 my-2">
+              <TouchableOpacity
+                onPress={handleTakePhoto}
+                className="flex-row items-center gap-1.5 bg-[#0878f9] px-3 py-2 rounded-xl"
+              >
                 <Camera size={16} color="#ffffff" />
-                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>Chụp ảnh</Text>
+                <Text className="text-white font-bold text-xs">Chụp ảnh</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={handlePickImage} style={styles.libBtn}>
+              <TouchableOpacity
+                onPress={handlePickImage}
+                className="flex-row items-center gap-1.5 bg-[#f5f6f8] border border-[#e4e5e9] px-3 py-2 rounded-xl"
+              >
                 <ImageIcon size={16} color="#0878f9" />
-                <Text style={{ color: '#101114', fontWeight: '500', fontSize: 13 }}>Thư viện</Text>
+                <Text className="text-[#101114] font-medium text-xs">Thư viện</Text>
               </TouchableOpacity>
             </View>
 
             {evidenceImages.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingTop: 6 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row pt-1.5">
                 {evidenceImages.map((uri, idx) => (
-                  <View key={idx} style={{ position: 'relative', marginRight: 12, marginTop: 4 }}>
-                    <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 10 }} />
+                  <View key={idx} className="relative mr-3 mt-1">
+                    <Image source={{ uri }} className="w-[80px] h-[80px] rounded-xl" />
                     <TouchableOpacity
                       onPress={() => handleRemoveImage(idx)}
-                      style={{
-                        position: 'absolute',
-                        top: -6,
-                        right: -6,
-                        backgroundColor: '#ef4444',
-                        borderRadius: 12,
-                        padding: 3,
-                      }}
+                      className="absolute -top-1.5 -right-1.5 bg-[#ef4444] rounded-full p-1"
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <X size={12} color="#ffffff" />
@@ -329,14 +318,14 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
                 ))}
               </ScrollView>
             ) : (
-              <Text style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic', marginTop: 4 }}>
+              <Text className="text-xs text-[#9ca3af] italic mt-1">
                 Chưa có ảnh minh chứng. Bấm nút phía trên để chụp/chọn ảnh hàng lỗi.
               </Text>
             )}
           </View>
 
           {/* Submit Section */}
-          <View style={{ marginTop: 12, marginBottom: 32 }}>
+          <View className="mt-3 mb-8">
             <AppButton
               label="Tạo Phiếu Đề Xuất Hủy Hàng"
               loading={submitting}
@@ -349,98 +338,3 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ececf1' },
-  header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e4e5e9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#101114' },
-  closeBtn: { padding: 8, backgroundColor: '#f5f6f8', borderRadius: 20 },
-  errorBox: {
-    backgroundColor: '#ffebeb',
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#f8c4c4',
-  },
-  errorText: { fontSize: 12, fontWeight: '600', color: '#c83a3a' },
-  card: {
-    backgroundColor: '#ffffff',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    marginBottom: 12,
-  },
-  cardHeader: { fontSize: 14, fontWeight: 'bold', color: '#101114', marginBottom: 8 },
-  fieldLabel: { fontSize: 12, fontWeight: '600', color: '#6c7078', marginBottom: 4 },
-  selectBtn: {
-    backgroundColor: '#f5f6f8',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  selectBtnText: { fontSize: 13, fontWeight: '600', color: '#0878f9' },
-  dropdownBox: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#0878f9',
-    borderRadius: 12,
-    padding: 8,
-    marginTop: 6,
-  },
-  searchInput: {
-    backgroundColor: '#f5f6f8',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  dropdownItem: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  dropdownItemTitle: { fontSize: 13, fontWeight: 'bold', color: '#101114' },
-  dropdownItemSub: { fontSize: 11, color: '#6c7078', marginTop: 2 },
-  emptyText: { fontSize: 12, color: '#9ca3af', textAlign: 'center', paddingVertical: 12 },
-  input: {
-    backgroundColor: '#f5f6f8',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
-    color: '#101114',
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  camBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#0878f9',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-  libBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#f5f6f8',
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-});

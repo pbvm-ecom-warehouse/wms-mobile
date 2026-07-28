@@ -4,7 +4,6 @@ import {
   Alert,
   Modal,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -163,50 +162,50 @@ export function PutawayDetailModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <View className="flex-1 bg-[#ececf1]">
         {/* Header */}
-        <View style={styles.header}>
+        <View className="bg-white px-4 pt-12 pb-3 border-b border-[#e4e5e9] flex-row items-center justify-between">
           <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.titleText}>
+            <View className="flex-row items-center gap-2">
+              <Text className="text-lg font-bold text-[#101114]">
                 Lệnh Cất Hàng #{activeTask.id.substring(0, 8).toUpperCase()}
               </Text>
               <StatusBadge {...badgeConfig} />
             </View>
-            <Text style={styles.subtitleText}>
+            <Text className="text-xs text-[#6c7078] mt-0.5">
               Phiếu Nhập PO/GRN: {activeTask.grnNumber || activeTask.grnId || 'N/A'}
             </Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={onClose} className="p-2 bg-[#f5f6f8] rounded-full">
             <X size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
         {errorMsg ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{errorMsg}</Text>
+          <View className="bg-[#ffebeb] p-3 mx-4 mt-3 rounded-xl border border-[#f8c4c4]">
+            <Text className="text-xs font-semibold text-[#c83a3a]">{errorMsg}</Text>
           </View>
         ) : null}
 
-        <ScrollView style={{ flex: 1, padding: 16 }} keyboardShouldPersistTaps="handled">
+        <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
           {/* General Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>Thông tin lệnh cất hàng</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.metaLabel}>Mã phiếu nhập (GRN ID):</Text>
-              <Text style={styles.metaValueBold}>{activeTask.grnNumber || activeTask.grnId}</Text>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">Thông tin lệnh cất hàng</Text>
+            <View className="flex-row justify-between py-1.5 border-b border-[#f5f6f8]">
+              <Text className="text-xs text-[#6c7078]">Mã phiếu nhập (GRN ID):</Text>
+              <Text className="text-xs font-bold text-[#101114]">{activeTask.grnNumber || activeTask.grnId}</Text>
             </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.metaLabel}>Tổng số dòng hàng:</Text>
-              <Text style={styles.metaValueBold}>{activeTask.items?.length || 0} sản phẩm</Text>
+            <View className="flex-row justify-between py-1.5">
+              <Text className="text-xs text-[#6c7078]">Tổng số dòng hàng:</Text>
+              <Text className="text-xs font-bold text-[#101114]">{activeTask.items?.length || 0} sản phẩm</Text>
             </View>
           </View>
 
           {/* Line Confirm Drawer / Card */}
           {selectedItem ? (
-            <View style={[styles.card, { borderColor: '#0878f9', borderWidth: 2 }]}>
-              <View style={styles.rowBetween}>
-                <Text style={[styles.cardHeader, { color: '#0878f9' }]}>
+            <View className="bg-white p-4 rounded-2xl border-2 border-[#0878f9] mb-3">
+              <View className="flex-row justify-between items-center mb-2">
+                <Text className="text-xs font-bold text-[#0878f9] uppercase">
                   Xác nhận cất hàng: {selectedItem.sku}
                 </Text>
                 <TouchableOpacity onPress={() => setSelectedItem(null)}>
@@ -214,11 +213,11 @@ export function PutawayDetailModal({
                 </TouchableOpacity>
               </View>
 
-              <View style={{ gap: 10, marginTop: 6 }}>
+              <View className="gap-2.5 mt-1.5">
                 <View>
-                  <Text style={styles.fieldLabel}>Mã SKU / Barcode quét được *</Text>
+                  <Text className="text-xs font-semibold text-[#6c7078] mb-1">Mã SKU / Barcode quét được *</Text>
                   <TextInput
-                    style={styles.input}
+                    className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                     value={itemBarcode}
                     onChangeText={setItemBarcode}
                     placeholder="Quét mã SKU hoặc nhập mã..."
@@ -226,9 +225,9 @@ export function PutawayDetailModal({
                 </View>
 
                 <View>
-                  <Text style={styles.fieldLabel}>Mã Kệ / Vị trí đích (Shelf Code) *</Text>
+                  <Text className="text-xs font-semibold text-[#6c7078] mb-1">Mã Kệ / Vị trí đích (Shelf Code) *</Text>
                   <TextInput
-                    style={styles.input}
+                    className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                     value={shelfCode}
                     onChangeText={setShelfCode}
                     placeholder="VD: SHELF-A01"
@@ -236,9 +235,9 @@ export function PutawayDetailModal({
                 </View>
 
                 <View>
-                  <Text style={styles.fieldLabel}>Số lượng cất thực tế *</Text>
+                  <Text className="text-xs font-semibold text-[#6c7078] mb-1">Số lượng cất thực tế *</Text>
                   <TextInput
-                    style={styles.input}
+                    className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
                     keyboardType="numeric"
                     value={quantity}
                     onChangeText={setQuantity}
@@ -247,50 +246,50 @@ export function PutawayDetailModal({
                 </View>
 
                 {/* Suggestions Card */}
-                <View style={styles.suggestionBox}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View className="bg-[#fffbeb] p-3 rounded-xl border border-[#fde68a] mt-1">
+                  <View className="flex-row items-center gap-1.5">
                     <Lightbulb size={16} color="#d97706" />
-                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#b45309' }}>
+                    <Text className="text-xs font-bold color-[#b45309]">
                       Gợi ý vị trí theo thể tích
                     </Text>
                   </View>
 
                   {loadingSuggestions ? (
-                    <ActivityIndicator size="small" color="#d97706" style={{ marginVertical: 8 }} />
+                    <ActivityIndicator size="small" color="#d97706" className="my-2" />
                   ) : suggestions.length > 0 ? (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    <View className="flex-row flex-wrap gap-1.5 mt-2">
                       {suggestions.map((s, idx) => (
                         <TouchableOpacity
                           key={idx}
                           onPress={() => setShelfCode(s.shelfCode)}
-                          style={styles.suggestionChip}
+                          className="bg-[#fef3c7] px-2.5 py-1 rounded-lg border border-[#fde68a]"
                         >
-                          <Text style={styles.suggestionChipText}>
+                          <Text className="text-xs font-semibold text-[#92400e]">
                             📍 {s.shelfCode} (Sức chứa: {s.capacity})
                           </Text>
                         </TouchableOpacity>
                       ))}
                     </View>
                   ) : (
-                    <Text style={{ fontSize: 11, color: '#b45309', marginTop: 4, fontStyle: 'italic' }}>
+                    <Text className="text-[11px] text-[#b45309] mt-1 italic">
                       {warningMsg || 'Không tìm thấy vị trí gợi ý tự động. Hãy nhập mã kệ thủ công.'}
                     </Text>
                   )}
                 </View>
 
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <View className="flex-row gap-2 mt-2">
                   <TouchableOpacity
                     onPress={() => setSelectedItem(null)}
-                    style={styles.cancelBtn}
+                    className="flex-1 bg-[#f5f6f8] border border-[#e4e5e9] py-2.5 rounded-xl items-center"
                   >
-                    <Text style={styles.cancelText}>Hủy</Text>
+                    <Text className="text-xs font-bold text-[#6c7078]">Hủy</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handleConfirmSubmit}
                     disabled={confirmingLine}
-                    style={styles.submitConfirmBtn}
+                    className="flex-[2] bg-[#0878f9] py-2.5 rounded-xl items-center"
                   >
-                    <Text style={styles.submitConfirmText}>
+                    <Text className="text-xs font-bold text-white">
                       {confirmingLine ? 'Đang lưu...' : 'Xác Nhận Cất Vào Kệ'}
                     </Text>
                   </TouchableOpacity>
@@ -300,45 +299,45 @@ export function PutawayDetailModal({
           ) : null}
 
           {/* Items List */}
-          <View style={styles.card}>
-            <Text style={styles.cardHeader}>Danh sách mặt hàng cần cất</Text>
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
+            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">Danh sách mặt hàng cần cất</Text>
             {activeTask.items && activeTask.items.length > 0 ? (
               activeTask.items.map((item, idx) => {
                 const isDone = (item.remainingQty ?? 0) <= 0;
                 return (
-                  <View key={item.itemId || idx} style={styles.itemBox}>
-                    <View style={styles.rowBetween}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <View key={item.itemId || idx} className="bg-[#f5f6f8] p-3 rounded-xl mb-2 border border-[#e4e5e9]">
+                    <View className="flex-row justify-between items-center">
+                      <View className="flex-row items-center gap-1.5 flex-1">
                         <Package size={16} color={isDone ? '#16a34a' : '#0878f9'} />
-                        <Text style={styles.itemName}>
+                        <Text className="text-sm font-bold text-[#101114]">
                           {item.itemName || item.sku}
                         </Text>
                       </View>
-                      <View style={[styles.qtyBadge, isDone ? { backgroundColor: '#dcfce7' } : null]}>
-                        <Text style={[styles.qtyText, isDone ? { color: '#16a34a' } : null]}>
+                      <View className={`px-2 py-0.5 rounded-lg ${isDone ? 'bg-[#dcfce7]' : 'bg-[#eaf3ff]'}`}>
+                        <Text className={`text-xs font-bold ${isDone ? 'text-[#16a34a]' : 'text-[#0878f9]'}`}>
                           {isDone ? 'Đã cất đủ' : `Còn lại: ${item.remainingQty ?? item.quantity}`}
                         </Text>
                       </View>
                     </View>
 
-                    <Text style={styles.subText}>
-                      SKU: <Text style={styles.boldText}>{item.sku}</Text> · Tổng cần cất: {item.quantity} {item.unit || 'cái'}
+                    <Text className="text-xs text-[#6c7078] mt-1">
+                      SKU: <Text className="font-bold text-[#101114]">{item.sku}</Text> · Tổng cần cất: {item.quantity} {item.unit || 'cái'}
                     </Text>
 
                     {item.lotNumber || item.lotId ? (
-                      <Text style={styles.subText}>
-                        Số lô: <Text style={styles.boldText}>{item.lotNumber || item.lotId}</Text>
+                      <Text className="text-xs text-[#6c7078]">
+                        Số lô: <Text className="font-bold text-[#101114]">{item.lotNumber || item.lotId}</Text>
                       </Text>
                     ) : null}
 
                     {canConfirm && !isDone ? (
-                      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                      <View className="flex-row justify-end mt-2">
                         <TouchableOpacity
                           onPress={() => handleOpenConfirmLine(item)}
-                          style={styles.confirmLineBtn}
+                          className="flex-row items-center gap-1.5 bg-[#0878f9] px-3 py-1.5 rounded-xl"
                         >
                           <CheckCircle2 size={15} color="#ffffff" />
-                          <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>
+                          <Text className="text-xs font-bold text-white">
                             Xác nhận cất hàng
                           </Text>
                         </TouchableOpacity>
@@ -348,7 +347,7 @@ export function PutawayDetailModal({
                 );
               })
             ) : (
-              <Text style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>
+              <Text className="text-xs text-[#9ca3af] italic">
                 Không có dòng hàng nào
               </Text>
             )}
@@ -358,112 +357,3 @@ export function PutawayDetailModal({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ececf1' },
-  header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e4e5e9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  titleText: { fontSize: 16, fontWeight: 'bold', color: '#101114' },
-  subtitleText: { fontSize: 12, color: '#6c7078', marginTop: 2 },
-  closeBtn: { padding: 8, backgroundColor: '#f5f6f8', borderRadius: 20 },
-  errorBox: {
-    backgroundColor: '#ffebeb',
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#f8c4c4',
-  },
-  errorText: { fontSize: 12, fontWeight: '600', color: '#c83a3a' },
-  card: {
-    backgroundColor: '#ffffff',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-    marginBottom: 12,
-  },
-  cardHeader: { fontSize: 14, fontWeight: 'bold', color: '#101114', marginBottom: 8 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  metaLabel: { fontSize: 12, color: '#6c7078' },
-  metaValueBold: { fontSize: 12, fontWeight: 'bold', color: '#101114' },
-  itemBox: {
-    backgroundColor: '#f8f9fa',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    marginBottom: 8,
-  },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  itemName: { fontSize: 13, fontWeight: 'bold', color: '#101114' },
-  qtyBadge: { backgroundColor: '#ffebeb', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  qtyText: { fontSize: 11, fontWeight: 'bold', color: '#dc2626' },
-  subText: { fontSize: 12, color: '#6c7078', marginTop: 3 },
-  boldText: { color: '#101114', fontWeight: '600' },
-  fieldLabel: { fontSize: 12, fontWeight: '600', color: '#6c7078', marginBottom: 4 },
-  input: {
-    backgroundColor: '#f5f6f8',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 13,
-    color: '#101114',
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  suggestionBox: {
-    backgroundColor: '#fffbeb',
-    borderWidth: 1,
-    borderColor: '#fef3c7',
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 4,
-  },
-  suggestionChip: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#fcd34d',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  suggestionChipText: { fontSize: 11, fontWeight: 'bold', color: '#b45309' },
-  confirmLineBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#0878f9',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  cancelBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#f5f6f8',
-    borderWidth: 1,
-    borderColor: '#e4e5e9',
-  },
-  cancelText: { fontSize: 13, fontWeight: '600', color: '#6c7078' },
-  submitConfirmBtn: {
-    flex: 2,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#0878f9',
-  },
-  submitConfirmText: { fontSize: 13, fontWeight: 'bold', color: '#ffffff' },
-});
