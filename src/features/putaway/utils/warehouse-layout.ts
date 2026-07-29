@@ -118,6 +118,17 @@ export function clampMapZoom(value: number): number {
   return clamp(Number.isFinite(value) ? value : minZoom, minZoom, maxZoom);
 }
 
+export function calculatePinchZoom(
+  initialZoom: number,
+  initialDistance: number,
+  currentDistance: number,
+): number {
+  if (initialDistance <= 0 || !Number.isFinite(currentDistance)) {
+    return clampMapZoom(initialZoom);
+  }
+  return clampMapZoom(roundLayout(initialZoom * (currentDistance / initialDistance)));
+}
+
 export function getMapViewBox(
   canvas: WarehouseLayoutCanvas,
   zoom: number,
@@ -210,6 +221,138 @@ export function buildRackRoutePoints(
     { xM: gate.xM, yM: accessPoint.yM },
     accessPoint,
   ];
+}
+
+type RouteNode = LayoutPoint & { aisles: Set<number> };
+
+function aislePoint(
+  aisle: WarehouseLayoutAisle,
+  point: LayoutPoint,
+): LayoutPoint {
+  const horizontal = aisle.widthM >= aisle.heightM;
+  return horizontal
+    ? {
+        xM: clamp(point.xM, aisle.xM, aisle.xM + aisle.widthM),
+        yM: aisle.yM + aisle.heightM / 2,
+      }
+    : {
+        xM: aisle.xM + aisle.widthM / 2,
+        yM: clamp(point.yM, aisle.yM, aisle.yM + aisle.heightM),
+      };
+}
+
+function aisleIntersection(
+  left: WarehouseLayoutAisle,
+  right: WarehouseLayoutAisle,
+): LayoutPoint | null {
+  const leftHorizontal = left.widthM >= left.heightM;
+  const rightHorizontal = right.widthM >= right.heightM;
+  if (leftHorizontal === rightHorizontal) return null;
+  const horizontal = leftHorizontal ? left : right;
+  const vertical = leftHorizontal ? right : left;
+  const point = {
+    xM: vertical.xM + vertical.widthM / 2,
+    yM: horizontal.yM + horizontal.heightM / 2,
+  };
+  return point.xM >= horizontal.xM &&
+    point.xM <= horizontal.xM + horizontal.widthM &&
+    point.yM >= vertical.yM &&
+    point.yM <= vertical.yM + vertical.heightM
+    ? point
+    : null;
+}
+
+function simplifyRoute(points: LayoutPoint[]): LayoutPoint[] {
+  const unique = points.filter(
+    (point, index) =>
+      index === 0 ||
+      point.xM !== points[index - 1].xM ||
+      point.yM !== points[index - 1].yM,
+  );
+  return unique.filter((point, index) => {
+    if (index === 0 || index === unique.length - 1) return true;
+    const previous = unique[index - 1];
+    const next = unique[index + 1];
+    return !(
+      (previous.xM === point.xM && point.xM === next.xM) ||
+      (previous.yM === point.yM && point.yM === next.yM)
+    );
+  });
+}
+
+export function buildAisleRoutePoints(
+  gate: LayoutPoint,
+  rack: WarehouseLayoutRack,
+  aisles: WarehouseLayoutAisle[],
+): LayoutPoint[] {
+  const accessPoint = getRackAccessPoint(rack, gate);
+  if (aisles.length === 0) return buildRackRoutePoints(gate, rack);
+
+  const distanceToAisle = (point: LayoutPoint, aisle: WarehouseLayoutAisle) => {
+    const projected = aislePoint(aisle, point);
+    return Math.hypot(projected.xM - point.xM, projected.yM - point.yM);
+  };
+  const startAisle = aisles.reduce((best, aisle) =>
+    distanceToAisle(gate, aisle) < distanceToAisle(gate, best) ? aisle : best,
+  );
+  const targetAisle = aisles.reduce((best, aisle) =>
+    distanceToAisle(accessPoint, aisle) < distanceToAisle(accessPoint, best) ? aisle : best,
+  );
+  const nodes: RouteNode[] = [];
+  const addNode = (point: LayoutPoint, aisleIndexes: number[]) => {
+    const existing = nodes.find(
+      (node) => Math.abs(node.xM - point.xM) < 0.0001 && Math.abs(node.yM - point.yM) < 0.0001,
+    );
+    if (existing) {
+      aisleIndexes.forEach((index) => existing.aisles.add(index));
+      return nodes.indexOf(existing);
+    }
+    nodes.push({ ...point, aisles: new Set(aisleIndexes) });
+    return nodes.length - 1;
+  };
+
+  const startAisleIndex = aisles.indexOf(startAisle);
+  const targetAisleIndex = aisles.indexOf(targetAisle);
+  const startIndex = addNode(aislePoint(startAisle, gate), [startAisleIndex]);
+  const targetIndex = addNode(aislePoint(targetAisle, accessPoint), [targetAisleIndex]);
+  aisles.forEach((aisle, leftIndex) => {
+    aisles.slice(leftIndex + 1).forEach((right, offset) => {
+      const rightIndex = leftIndex + offset + 1;
+      const intersection = aisleIntersection(aisle, right);
+      if (intersection) addNode(intersection, [leftIndex, rightIndex]);
+    });
+  });
+
+  const distances = nodes.map(() => Infinity);
+  const previous = nodes.map(() => -1);
+  const visited = new Set<number>();
+  distances[startIndex] = 0;
+  while (visited.size < nodes.length) {
+    let current = -1;
+    nodes.forEach((_, index) => {
+      if (!visited.has(index) && (current < 0 || distances[index] < distances[current])) current = index;
+    });
+    if (current < 0 || distances[current] === Infinity || current === targetIndex) break;
+    visited.add(current);
+    nodes.forEach((candidate, index) => {
+      if (visited.has(index) || index === current) return;
+      const connected = [...nodes[current].aisles].some((aisleIndex) => candidate.aisles.has(aisleIndex));
+      if (!connected) return;
+      const nextDistance = distances[current] + Math.hypot(candidate.xM - nodes[current].xM, candidate.yM - nodes[current].yM);
+      if (nextDistance < distances[index]) {
+        distances[index] = nextDistance;
+        previous[index] = current;
+      }
+    });
+  }
+
+  if (!Number.isFinite(distances[targetIndex])) return buildRackRoutePoints(gate, rack);
+  const aislePath: LayoutPoint[] = [];
+  for (let index = targetIndex; index >= 0; index = previous[index]) {
+    aislePath.unshift({ xM: nodes[index].xM, yM: nodes[index].yM });
+    if (index === startIndex) break;
+  }
+  return simplifyRoute([gate, ...aislePath, accessPoint]);
 }
 
 export function calculateRouteDistance(points: LayoutPoint[]): number {

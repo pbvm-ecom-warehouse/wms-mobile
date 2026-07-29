@@ -1,5 +1,7 @@
 import {
+  buildAisleRoutePoints,
   buildRackRoutePoints,
+  calculatePinchZoom,
   getRackAccessPoint,
   getMapViewBox,
   getRackRect,
@@ -265,5 +267,35 @@ describe("warehouse layout normalization", () => {
         { dxPx: 30, dyPx: -39 },
       ),
     ).toEqual({ xM: 24.65, yM: 13.3 });
+  });
+
+  it("calculates pinch zoom from the initial two-finger distance", () => {
+    expect(calculatePinchZoom(1.5, 100, 160)).toBe(2.4);
+    expect(calculatePinchZoom(2.5, 100, 200)).toBe(3);
+  });
+
+  it("routes through connected main and rack aisles instead of cutting across storage", () => {
+    const points = buildAisleRoutePoints(
+      { xM: 5, yM: 10 },
+      {
+        id: "rack-target",
+        code: "RACK-09",
+        xM: 13,
+        yM: 1,
+        widthM: 2,
+        depthM: 1,
+        accessPoint: { xM: 14, yM: 3 },
+      },
+      [
+        { id: "main", code: "MAIN", type: "MAIN", xM: 4, yM: 0, widthM: 2, heightM: 11 },
+        { id: "rack-aisle", code: "RACK-AISLE", type: "RACK", xM: 4, yM: 2, widthM: 11, heightM: 2 },
+      ],
+    );
+
+    expect(points).toEqual([
+      { xM: 5, yM: 10 },
+      { xM: 5, yM: 3 },
+      { xM: 14, yM: 3 },
+    ]);
   });
 });

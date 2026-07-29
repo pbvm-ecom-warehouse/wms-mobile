@@ -3,9 +3,9 @@ import { ActivityIndicator, Modal, PanResponder, Text, TouchableOpacity, View } 
 import Svg, { Circle, Defs, G, Path, Pattern, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { Maximize2, Minus, Navigation, Plus, X } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
-import { fetchWarehouseLayout, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
+import { fetchWarehouseLayout, getNavigationPath, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
 import type { NavigationPath } from '../types/putaway';
-import { buildRackRoutePoints, calculateRouteDistance, clampMapZoom, getMapViewBox, getRackRect, isFiniteLayoutPoint, panMapCenter, type LayoutPoint } from '../utils/warehouse-layout';
+import { buildAisleRoutePoints, calculatePinchZoom, calculateRouteDistance, clampMapZoom, getMapViewBox, getRackRect, isFiniteLayoutPoint, panMapCenter, type LayoutPoint } from '../utils/warehouse-layout';
 import { RackCellViewerModal } from './rack-cell-viewer-modal';
 
 export interface WarehouseRouteMapModalProps {
@@ -237,11 +237,19 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
   const [layout, setLayout] = useState<WarehouseLayout>(fallbackLayout);
   const [loading, setLoading] = useState(false);
   const [rackViewerOpen, setRackViewerOpen] = useState(false);
+  const [selectedPath, setSelectedPath] = useState<NavigationPath | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [mapCenter, setMapCenter] = useState<LayoutPoint>({ xM: layoutCanvas.widthM / 2, yM: layoutCanvas.heightM / 2 });
   const [mapSize, setMapSize] = useState({ widthPx: 1, heightPx: 390 });
   const lastPanRef = useRef({ x: 0, y: 0 });
   const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
+  const zoomRef = useRef(zoomLevel);
+  const canvasRef = useRef(layout.canvas);
+  const mapSizeRef = useRef(mapSize);
+
+  zoomRef.current = zoomLevel;
+  canvasRef.current = layout.canvas;
+  mapSizeRef.current = mapSize;
 
   useEffect(() => {
     if (visible) {
@@ -269,17 +277,18 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
   const racks = layout.racks;
   const canvas = layout.canvas;
   const gates = layout.gates.length > 0 ? layout.gates : [defaultGate];
-  const startGate = gates.find((gate) => gate.code === path?.startGateCode) ?? gates[0];
-  const selectedPathMatches = selectedRack ? path?.targetRackId === selectedRack.id || path?.targetRackId === selectedRack.code : false;
-  const apiPoints = selectedPathMatches && path?.points?.length && path.points.every(isFiniteLayoutPoint) ? path.points : null;
+  const activePath = selectedPath ?? path;
+  const startGate = gates.find((gate) => gate.code === activePath?.startGateCode) ?? gates[0];
+  const selectedPathMatches = selectedRack ? activePath?.targetRackId === selectedRack.id || activePath?.targetRackId === selectedRack.code : false;
+  const apiPoints = selectedPathMatches && activePath?.points?.length && activePath.points.every(isFiniteLayoutPoint) ? activePath.points : null;
   const points = useMemo(
-    () => apiPoints ?? (selectedRack ? buildRackRoutePoints(startGate, selectedRack) : []),
-    [apiPoints, selectedRack, startGate],
+    () => apiPoints ?? (selectedRack ? buildAisleRoutePoints(startGate, selectedRack, layout.aisles) : []),
+    [apiPoints, layout.aisles, selectedRack, startGate],
   );
 
   const routePolylinePoints = points.map((p) => `${p.xM},${p.yM}`).join(' ');
-  const distance = selectedPathMatches && path?.distanceM ? path.distanceM : calculateRouteDistance(points);
-  const gateCode = path?.startGateCode ?? startGate.code;
+  const distance = selectedPathMatches && activePath?.distanceM ? activePath.distanceM : calculateRouteDistance(points);
+  const gateCode = activePath?.startGateCode ?? startGate.code;
   const currentRackCode = selectedRack?.code || 'RACK-02';
   const routeCenter = useMemo(
     () =>
@@ -301,6 +310,25 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
     }
   }, [visible, selectedRack?.id, selectedRack?.code, routeCenter]);
 
+  useEffect(() => {
+    if (!visible || !selectedRack) return;
+    if (path && (path.targetRackId === selectedRack.id || path.targetRackId === selectedRack.code)) {
+      setSelectedPath(path);
+      return;
+    }
+
+    let cancelled = false;
+    setSelectedPath(null);
+    getNavigationPath(selectedRack.id).then((navigationPath) => {
+      if (!cancelled && navigationPath?.points?.every(isFiniteLayoutPoint)) {
+        setSelectedPath(navigationPath);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [path, selectedRack, visible]);
+
   const handleRackPress = (rack: WarehouseLayoutRack) => {
     setSelectedRack(rack);
   };
@@ -316,11 +344,12 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
     setMapCenter(routeCenter);
   };
 
-  const mapPanResponder = useMemo(
-    () =>
+  const mapPanResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: (event) => event.nativeEvent.touches.length >= 2,
+        onStartShouldSetPanResponderCapture: (event) => event.nativeEvent.touches.length >= 2,
         onMoveShouldSetPanResponder: (event, gestureState) => event.nativeEvent.touches.length >= 2 || Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+        onMoveShouldSetPanResponderCapture: (event, gestureState) => event.nativeEvent.touches.length >= 2 || Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3,
         onPanResponderGrant: (event) => {
           lastPanRef.current = { x: 0, y: 0 };
           const touches = event.nativeEvent.touches;
@@ -335,10 +364,14 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
         onPanResponderMove: (event, gestureState) => {
           const touches = event.nativeEvent.touches;
           if (touches.length >= 2) {
-            const pinch = pinchRef.current;
             const nextDistance = Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY);
+            if (!pinchRef.current) {
+              pinchRef.current = { distance: nextDistance, zoom: zoomRef.current };
+              return;
+            }
+            const pinch = pinchRef.current;
             if (pinch && pinch.distance > 0) {
-              setZoomLevel(clampMapZoom(Number((pinch.zoom * (nextDistance / pinch.distance)).toFixed(2))));
+              setZoomLevel(calculatePinchZoom(pinch.zoom, pinch.distance, nextDistance));
             }
             return;
           }
@@ -346,7 +379,7 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
           const dxPx = gestureState.dx - lastPanRef.current.x;
           const dyPx = gestureState.dy - lastPanRef.current.y;
           lastPanRef.current = { x: gestureState.dx, y: gestureState.dy };
-          setMapCenter((center) => panMapCenter(center, canvas, zoomLevel, mapSize, { dxPx, dyPx }));
+          setMapCenter((center) => panMapCenter(center, canvasRef.current, zoomRef.current, mapSizeRef.current, { dxPx, dyPx }));
         },
         onPanResponderRelease: () => {
           pinchRef.current = null;
@@ -356,9 +389,9 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
           pinchRef.current = null;
           lastPanRef.current = { x: 0, y: 0 };
         },
+        onShouldBlockNativeResponder: () => true,
       }),
-    [canvas, mapSize, zoomLevel],
-  );
+  ).current;
 
   if (!visible) return null;
 
