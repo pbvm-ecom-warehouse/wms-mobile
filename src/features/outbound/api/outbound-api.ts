@@ -1,4 +1,4 @@
-import { apiClient, unwrapData } from '@/shared/lib/api-client';
+import { apiClient, cachedGet, unwrapData } from '@/shared/lib/api-client';
 
 export type GoodsIssueStatus = 'DRAFT' | 'PICKING' | 'PACKING' | 'CONFIRMED' | 'SHIPPED';
 
@@ -30,8 +30,8 @@ interface ApiListResponse<T> {
   limit: number;
 }
 
-export async function listGoodsIssues(): Promise<GoodsIssue[]> {
-  const response = await apiClient.get<ApiListResponse<GoodsIssue> | GoodsIssue[]>('/goods-issues');
+export async function listGoodsIssues(forceRefresh = false): Promise<GoodsIssue[]> {
+  const response = await cachedGet<ApiListResponse<GoodsIssue> | GoodsIssue[]>('/goods-issues', undefined, { forceRefresh });
   const unwrapped = unwrapData<ApiListResponse<GoodsIssue> | GoodsIssue[]>(response.data);
   if (Array.isArray(unwrapped)) {
     return unwrapped;

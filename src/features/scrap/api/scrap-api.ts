@@ -1,4 +1,4 @@
-import { apiClient, unwrapData } from '@/shared/lib/api-client';
+import { apiClient, cachedGet, unwrapData } from '@/shared/lib/api-client';
 import type {
   CreateScrapNoteInput,
   QueryScrapNotesInput,
@@ -14,14 +14,17 @@ interface ApiListLike<T> {
   limit?: number;
 }
 
-export async function listScrapNotes(input: QueryScrapNotesInput = {}): Promise<ScrapNote[]> {
-  const response = await apiClient.get<ApiListLike<ScrapNote> | ScrapNote[]>('/scrap-notes', {
+export async function listScrapNotes(
+  input: QueryScrapNotesInput = {},
+  forceRefresh = false,
+): Promise<ScrapNote[]> {
+  const response = await cachedGet<ApiListLike<ScrapNote> | ScrapNote[]>('/scrap-notes', {
     params: {
       limit: input.limit,
       page: input.page,
       status: input.status && input.status !== 'ALL' ? input.status : undefined,
     },
-  });
+  }, { forceRefresh });
   const unwrapped = unwrapData<ApiListLike<ScrapNote> | ScrapNote[]>(response.data);
   if (Array.isArray(unwrapped)) {
     return unwrapped;
@@ -36,7 +39,7 @@ export async function listScrapNotes(input: QueryScrapNotesInput = {}): Promise<
 }
 
 export async function getScrapNote(id: string): Promise<ScrapNote> {
-  const response = await apiClient.get<ScrapNote>(`/scrap-notes/${encodeURIComponent(id)}`);
+  const response = await cachedGet<ScrapNote>(`/scrap-notes/${encodeURIComponent(id)}`);
   return unwrapData<ScrapNote>(response.data);
 }
 

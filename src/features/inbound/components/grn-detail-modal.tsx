@@ -6,6 +6,7 @@ import {
   Modal,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -17,6 +18,7 @@ import {
   ImageIcon,
   Trash2,
   X,
+  XCircle,
 } from 'lucide-react-native';
 import { useAuth } from '@/features/auth/context/auth-context';
 import { ENV } from '@/shared/config/env';
@@ -25,10 +27,11 @@ import { WmsRole } from '@/shared/types/auth';
 import { AppButton, StatusBadge } from '@/shared/ui';
 import {
   approveGoodsReceiptNote,
-  confirmGoodsReceiptNote,
   deleteGoodsReceiptNote,
   deleteGrnImage,
   getGoodsReceiptNote,
+  rejectGoodsReceiptNote,
+  submitGoodsReceiptNote,
   uploadGrnImage,
 } from '../api/grn-api';
 import type { GoodsReceiptNote } from '../types/grn';
@@ -48,13 +51,39 @@ function resolveImageUrl(uri?: string): string {
   return `${baseUrl}${cleanPath}`;
 }
 
+function formatDateOnly(dateStr?: string | null): string {
+  if (!dateStr || dateStr === 'Chưa cập nhật') return 'Chưa cập nhật';
+  try {
+    const raw = dateStr.trim();
+    if (raw.includes('T')) {
+      const datePart = raw.split('T')[0];
+      const parts = datePart.split('-');
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+
+    const date = new Date(raw);
+    if (!isNaN(date.getTime())) {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    return raw;
+  } catch {
+    return dateStr;
+  }
+}
+
 const statusBadgeMap: Record<
   string,
-  { label: string; variant: 'neutral' | 'warning' | 'success' }
+  { label: string; variant: 'neutral' | 'warning' | 'success' | 'danger' }
 > = {
   DRAFT: { label: 'Nháp', variant: 'neutral' },
-  CONFIRMED: { label: 'Đã xác nhận', variant: 'warning' },
-  APPROVED: { label: 'Đã duyệt (Audit)', variant: 'success' },
+  PENDING_APPROVAL: { label: 'Chờ duyệt', variant: 'warning' },
+  APPROVED: { label: 'Đã duyệt', variant: 'success' },
+  REJECTED: { label: 'Từ chối', variant: 'danger' },
 };
 
 interface GrnDetailModalProps {
@@ -71,8 +100,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
   const { user } = useAuth();
   const [detailGrn, setDetailGrn] = useState<GoodsReceiptNote | null>(grn);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -118,12 +150,12 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
   if (!activeGrn) return null;
 
   const userRole = user?.role?.toUpperCase();
-  const canConfirm =
+  const canSubmit =
     activeGrn.status === 'DRAFT' &&
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
 
-  const canApprove =
-    activeGrn.status === 'CONFIRMED' &&
+  const canApproveOrReject =
+    activeGrn.status === 'PENDING_APPROVAL' &&
     (userRole === WmsRole.MANAGER || userRole === WmsRole.ADMIN);
 
   const canDelete =
@@ -131,12 +163,10 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN);
 
   const hasImages = Boolean(activeGrn.images && activeGrn.images.length > 0);
-  const isApprovedOrConfirmedWithImages =
-    (activeGrn.status === 'APPROVED' || activeGrn.status === 'CONFIRMED') && hasImages;
 
   const canUploadImage =
-    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER) &&
-    !isApprovedOrConfirmedWithImages;
+    activeGrn.status === 'DRAFT' &&
+    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
 
   const canDeleteImage =
     activeGrn.status === 'DRAFT' &&
@@ -212,20 +242,21 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     );
   };
 
-  const handleConfirm = async () => {
-    setConfirming(true);
+  const handleSubmitGrn = async () => {
+    setSubmitting(true);
     setErrorMsg(null);
     try {
-      const updated = await confirmGoodsReceiptNote(activeGrn.id);
-      Alert.alert('Thành công', 'Đã xác nhận phiếu nhập kho');
-      setDetailGrn(updated);
-      onUpdate(updated);
+      const updated = await submitGoodsReceiptNote(activeGrn.id);
+      const fresh = { ...activeGrn, ...updated, status: 'PENDING_APPROVAL' as const };
+      Alert.alert('Thành công', 'Đã gửi duyệt phiếu nhập kho');
+      setDetailGrn(fresh);
+      onUpdate(fresh);
     } catch (err: any) {
       const msg =
-        err?.response?.data?.message || err?.message || 'Xác nhận phiếu nhập kho thất bại';
+        err?.response?.data?.message || err?.message || 'Gửi duyệt phiếu nhập kho thất bại';
       setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
     } finally {
-      setConfirming(false);
+      setSubmitting(false);
     }
   };
 
@@ -234,15 +265,41 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     setErrorMsg(null);
     try {
       const updated = await approveGoodsReceiptNote(activeGrn.id);
-      Alert.alert('Thành công', 'Đã duyệt phiếu nhập kho (Audit)');
-      setDetailGrn(updated);
-      onUpdate(updated);
+      const fresh = { ...activeGrn, ...updated, status: 'APPROVED' as const };
+      Alert.alert('Thành công', 'Đã duyệt phiếu nhập kho');
+      setDetailGrn(fresh);
+      onUpdate(fresh);
     } catch (err: any) {
       const msg =
         err?.response?.data?.message || err?.message || 'Duyệt phiếu nhập kho thất bại';
       setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectReason.trim()) {
+      Alert.alert('Cảnh báo', 'Vui lòng nhập lý do từ chối phiếu nhập.');
+      return;
+    }
+
+    setRejecting(true);
+    setErrorMsg(null);
+    try {
+      const updated = await rejectGoodsReceiptNote(activeGrn.id, rejectReason.trim());
+      const fresh = { ...activeGrn, ...updated, status: 'REJECTED' as const, rejectionReason: rejectReason.trim() };
+      Alert.alert('Thành công', 'Đã từ chối phiếu nhập kho và gửi lý do phản hồi');
+      setShowRejectModal(false);
+      setRejectReason('');
+      setDetailGrn(fresh);
+      onUpdate(fresh);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message || err?.message || 'Từ chối phiếu nhập kho thất bại';
+      setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -344,6 +401,18 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
         ) : null}
 
         <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
+          {/* Rejection Reason Alert if REJECTED */}
+          {activeGrn.status === 'REJECTED' && activeGrn.rejectionReason ? (
+            <View className="bg-[#ffebeb] p-3.5 rounded-2xl border border-[#f8c4c4] mb-4">
+              <Text className="text-xs font-bold text-[#c83a3a] uppercase mb-1">
+                Lý do bị từ chối
+              </Text>
+              <Text className="text-xs font-medium text-[#101114]">
+                {activeGrn.rejectionReason}
+              </Text>
+            </View>
+          ) : null}
+
           {/* General Information Card */}
           <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-4">
             <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">
@@ -387,14 +456,19 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
                     </Text>
                     <View className="bg-[#eaf3ff] px-2 py-0.5 rounded-lg">
                       <Text className="text-xs font-bold text-[#0878f9]">
-                        {item.actualQty} {item.unit}
+                        {item.actualQty} {item.unit || 'thùng'}
                       </Text>
                     </View>
                   </View>
                   <Text className="text-xs text-[#6c7078]">SKU: {item.sku}</Text>
-                  
-                  {item.lotNumber || item.expiryDate ? (
-                    <View className="flex-row gap-3 mt-1.5 pt-1.5 border-t border-[#e4e5e9]/50">
+
+                  {item.manufacturedDate || item.lotNumber || item.expiryDate ? (
+                    <View className="flex-row flex-wrap gap-x-4 gap-y-1 mt-1.5 pt-1.5 border-t border-[#e4e5e9]/50">
+                      {item.manufacturedDate ? (
+                        <Text className="text-xs text-[#6c7078]">
+                          NSX: <Text className="text-xs font-bold text-[#101114]">{formatDateOnly(item.manufacturedDate)}</Text>
+                        </Text>
+                      ) : null}
                       {item.lotNumber ? (
                         <Text className="text-xs text-[#6c7078]">
                           Số lô: <Text className="text-xs font-bold text-[#101114]">{item.lotNumber}</Text>
@@ -402,7 +476,7 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
                       ) : null}
                       {item.expiryDate ? (
                         <Text className="text-xs text-[#6c7078]">
-                          Hạn dùng: <Text className="text-xs font-bold text-[#101114]">{item.expiryDate}</Text>
+                          Hạn dùng: <Text className="text-xs font-bold text-[#101114]">{formatDateOnly(item.expiryDate)}</Text>
                         </Text>
                       ) : null}
                     </View>
@@ -488,28 +562,40 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
 
           {/* Action Buttons */}
           <View className="mb-8 gap-2.5">
-            {canConfirm ? (
+            {canSubmit ? (
               <AppButton
-                label="Xác Nhận Nhận Hàng (CONFIRM)"
-                loading={confirming}
-                onPress={handleConfirm}
+                label="Gửi Duyệt Phiếu Nhập Kho"
+                loading={submitting}
+                onPress={handleSubmitGrn}
                 icon={<CheckCircle2 size={18} color="#ffffff" />}
               />
             ) : null}
 
-            {canApprove ? (
-              <AppButton
-                label="Duyệt Phiếu Nhập Kho (APPROVE)"
-                loading={approving}
-                onPress={handleApprove}
-                icon={<CheckCircle size={18} color="#ffffff" />}
-              />
+            {canApproveOrReject ? (
+              <View className="gap-2">
+                <AppButton
+                  label="Duyệt Phiếu Nhập Kho"
+                  loading={approving}
+                  onPress={handleApprove}
+                  icon={<CheckCircle size={18} color="#ffffff" />}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowRejectModal(true)}
+                  disabled={approving || rejecting}
+                  className="flex-row items-center justify-center gap-1.5 bg-[#ffebeb] border border-[#f8c4c4] py-3 rounded-xl"
+                >
+                  <XCircle size={16} color="#dc2626" />
+                  <Text className="text-sm font-bold text-[#dc2626]">
+                    Từ Chối Phiếu Nhập Kho
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : null}
 
             {canDelete ? (
               <TouchableOpacity
                 onPress={handleDelete}
-                disabled={deleting || confirming}
+                disabled={deleting || submitting}
                 className="flex-row items-center justify-center gap-1.5 bg-[#ffebeb] border border-[#f8c4c4] py-3 rounded-xl mt-1"
               >
                 {deleting ? (
@@ -527,6 +613,50 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
           </View>
         </ScrollView>
       </View>
+
+      {/* Reject Reason Modal Dialog */}
+      <Modal transparent animationType="fade" visible={showRejectModal} onRequestClose={() => setShowRejectModal(false)}>
+        <TouchableOpacity className="flex-1 bg-black/45 justify-center items-center p-4" activeOpacity={1} onPress={() => setShowRejectModal(false)}>
+          <TouchableOpacity activeOpacity={1} className="w-full max-w-[360px] bg-white rounded-2xl p-4 shadow-lg">
+            <View className="flex-row justify-between items-center mb-3">
+              <Text className="text-base font-bold text-[#101114]">Từ Chối Phiếu Nhập Kho</Text>
+              <TouchableOpacity onPress={() => setShowRejectModal(false)} className="p-1.5 rounded-full bg-[#f5f6f8]">
+                <X size={18} color="#6c7078" />
+              </TouchableOpacity>
+            </View>
+            <Text className="text-xs text-[#6c7078] mb-2">
+              Vui lòng nhập lý do từ chối phiếu nhập kho này để phản hồi lại cho Receiver:
+            </Text>
+            <TextInput
+              className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl p-3 text-xs text-[#101114] min-h-[80px] mb-3"
+              multiline
+              textAlignVertical="top"
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="VD: Sai lệch số lượng thực nhận so với thực tế..."
+            />
+            <View className="flex-row gap-2">
+              <TouchableOpacity
+                onPress={() => setShowRejectModal(false)}
+                className="flex-1 bg-[#f5f6f8] py-2.5 rounded-xl items-center"
+              >
+                <Text className="text-xs font-bold text-[#6c7078]">Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleConfirmReject}
+                disabled={rejecting}
+                className="flex-1 bg-[#dc2626] py-2.5 rounded-xl items-center"
+              >
+                {rejecting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text className="text-xs font-bold text-white">Xác nhận Từ Chối</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </Modal>
   );
 }

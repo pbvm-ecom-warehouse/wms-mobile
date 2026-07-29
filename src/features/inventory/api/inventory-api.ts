@@ -1,4 +1,4 @@
-import { apiClient, unwrapData } from '@/shared/lib/api-client';
+import { apiClient, cachedGet, unwrapData } from '@/shared/lib/api-client';
 
 export type StockCountStatus = 'DRAFT' | 'COUNTING' | 'WAITING_APPROVAL' | 'APPROVED' | 'CANCELLED';
 
@@ -18,8 +18,8 @@ interface ApiListResponse<T> {
   limit: number;
 }
 
-export async function listStockCounts(): Promise<StockCount[]> {
-  const response = await apiClient.get<ApiListResponse<StockCount> | StockCount[]>('/stock-counts');
+export async function listStockCounts(forceRefresh = false): Promise<StockCount[]> {
+  const response = await cachedGet<ApiListResponse<StockCount> | StockCount[]>('/stock-counts', undefined, { forceRefresh });
   const unwrapped = unwrapData<ApiListResponse<StockCount> | StockCount[]>(response.data);
   if (Array.isArray(unwrapped)) {
     return unwrapped;

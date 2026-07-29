@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -7,186 +7,264 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Layers, RefreshCw } from 'lucide-react-native';
-import { colors } from '@/shared/theme/tokens';
-import { AppHeader, EmptyState, ListRow, Screen, SearchField, StatusBadge, Surface } from '@/shared/ui';
+import { MapPin, Package, RefreshCw } from 'lucide-react-native';
+import { listGoodsReceiptNotes } from '@/features/inbound/api/grn-api';
+import type { GoodsReceiptNote } from '@/features/inbound/types/grn';
+import { formatApiError } from '@/shared/lib/api-client';
+import {
+  AppHeader,
+  EmptyState,
+  Screen,
+  SearchField,
+  StatusBadge,
+  Surface,
+} from '@/shared/ui';
 import { listPutawayTasks } from '../api/putaway-api';
+import type { PutawayTask, PutawayTaskItem, PutawayTaskStatus } from '../types/putaway';
 import { PutawayDetailModal } from '../components/putaway-detail-modal';
-import type { PutawayTask, PutawayTaskStatus } from '../types/putaway';
 
-const filterTabs: { key: PutawayTaskStatus | 'ALL'; label: string }[] = [
+type FilterStatus = 'ALL' | PutawayTaskStatus;
+
+const filterTabs: { key: FilterStatus; label: string }[] = [
   { key: 'ALL', label: 'Tất cả' },
-  { key: 'PENDING', label: 'Chờ cất hàng' },
-  { key: 'COMPLETED', label: 'Đã cất hàng' },
+  { key: 'PENDING', label: 'Đang cất' },
+  { key: 'COMPLETED', label: 'Hoàn thành' },
 ];
 
-const statusBadgeMap: Record<
-  string,
-  { label: string; variant: 'neutral' | 'warning' | 'success' }
-> = {
-  PENDING: { label: 'Chờ cất hàng', variant: 'warning' },
-  COMPLETED: { label: 'Đã cất hàng', variant: 'success' },
-};
-
 export function PutawayScreen() {
-  const [taskList, setTaskList] = useState<PutawayTask[]>([]);
+  const [tasks, setTasks] = useState<PutawayTask[]>([]);
+  const [receipts, setReceipts] = useState<GoodsReceiptNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeStatus, setActiveStatus] = useState<FilterStatus>('ALL');
   const [search, setSearch] = useState('');
-  const [activeStatus, setActiveStatus] = useState<PutawayTaskStatus | 'ALL'>('ALL');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [selectedTask, setSelectedTask] = useState<PutawayTask | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
-  const fetchTasks = useCallback(
-    async (isRefresh = false) => {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setErrorMsg(null);
+  const fetchAllData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setErrorMsg(null);
 
-      try {
-        const data = await listPutawayTasks({ status: activeStatus });
-        setTaskList(data);
-      } catch (err: any) {
-        const msg =
-          err?.response?.data?.message || err?.message || 'Không thể tải danh sách lệnh cất hàng';
-        setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
+    try {
+      const [tasksRes, receiptsRes] = await Promise.allSettled([
+        listPutawayTasks({ status: activeStatus }, isRefresh),
+        listGoodsReceiptNotes({}, isRefresh),
+      ]);
+
+      if (tasksRes.status === 'fulfilled') {
+        setTasks(tasksRes.value || []);
+      } else {
+        console.warn('Lỗi tải Putaway Tasks:', tasksRes.reason);
       }
-    },
-    [activeStatus],
-  );
+
+      if (receiptsRes.status === 'fulfilled') {
+        setReceipts(receiptsRes.value || []);
+      } else {
+        console.warn('Lỗi tải GRN receipts:', receiptsRes.reason);
+      }
+    } catch (err: any) {
+      setErrorMsg(formatApiError(err));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [activeStatus]);
 
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    fetchAllData();
+  }, [fetchAllData]);
 
-  const query = search.trim().toLowerCase();
-  const filteredList = taskList.filter((item) => {
-    if (!query) return true;
-    const matchId = item.id.toLowerCase().includes(query);
-    const matchGrn = item.grnNumber?.toLowerCase().includes(query) || item.grnId?.toLowerCase().includes(query);
-    const matchItem = item.items?.some(
-      (it) => it.sku?.toLowerCase().includes(query) || it.itemName?.toLowerCase().includes(query),
+  // Flatten items list to directly display Product Name, SKU, and Quantity
+  const flatProductItems = useMemo(() => {
+    const list: Array<{
+      task: PutawayTask;
+      item: PutawayTaskItem;
+      sku: string;
+      itemName: string;
+      remainingQty: number;
+      status: PutawayTaskStatus;
+    }> = [];
+
+    tasks.forEach((t) => {
+      if (activeStatus !== 'ALL' && t.status !== activeStatus) return;
+
+      const grn = receipts.find((r) => r.id === t.grnId);
+      (t.items || []).forEach((item) => {
+        const grnItem = grn?.items?.find((i) => i.itemId === item.itemId);
+        const resolvedSku =
+          item.sku && !item.sku.startsWith('SKU-')
+            ? item.sku
+            : grnItem?.sku || item.sku || item.itemId;
+
+        const remaining = item.remainingQty ?? item.quantity ?? 10;
+        list.push({
+          task: t,
+          item,
+          sku: resolvedSku,
+          itemName: item.itemName || grnItem?.itemName || 'Sản phẩm',
+          remainingQty: remaining,
+          status: t.status,
+        });
+      });
+    });
+
+    // Sort PENDING ('Đang cất') tasks/items to top, COMPLETED ('Hoàn thành') items to bottom
+    list.sort((a, b) => {
+      const aIsPending = a.status === 'PENDING' && a.remainingQty > 0;
+      const bIsPending = b.status === 'PENDING' && b.remainingQty > 0;
+      if (aIsPending && !bIsPending) return -1;
+      if (!aIsPending && bIsPending) return 1;
+      return 0;
+    });
+
+    if (!search.trim()) return list;
+
+    const q = search.toLowerCase().trim();
+    return list.filter(
+      (p) =>
+        p.sku.toLowerCase().includes(q) ||
+        p.itemName.toLowerCase().includes(q),
     );
-    return Boolean(matchId || matchGrn || matchItem);
-  });
+  }, [tasks, receipts, activeStatus, search]);
 
-  const handleTaskUpdated = (updated: PutawayTask) => {
-    setTaskList((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
-    setSelectedTask(updated);
+  const handleOpenItemMap = (task: PutawayTask) => {
+    setSelectedTask(task);
+    setModalVisible(true);
   };
 
   return (
     <Screen withTabBar>
       <AppHeader
-        title="Lệnh Cất Hàng (Put-away)"
-        subtitle={loading ? 'Đang kết nối API...' : `${taskList.length} lệnh cất hàng`}
+        title="Cất Hàng (Putaway)"
+        subtitle="Danh sách sản phẩm cần xếp vào khoang kệ kho"
       />
 
-      {/* Filter Tabs */}
-      <View className="flex-row gap-2 mb-3">
+      {/* Search Field */}
+      <SearchField
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Tìm theo tên sản phẩm, SKU..."
+      />
+
+      {/* Filter Status Tabs */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="flex-row my-3"
+      >
         {filterTabs.map((tab) => {
           const isActive = activeStatus === tab.key;
           return (
             <TouchableOpacity
               key={tab.key}
               onPress={() => setActiveStatus(tab.key)}
-              className={`px-3 py-1.5 rounded-full border ${
-                isActive ? 'bg-[#0878f9] border-[#0878f9]' : 'bg-white border-[#e4e5e9]'
+              className={`mr-2 px-4 py-2 rounded-full border ${
+                isActive
+                  ? 'bg-[#0878f9] border-[#0878f9]'
+                  : 'bg-white border-[#e4e5e9]'
               }`}
             >
-              <Text className={`text-xs font-semibold ${isActive ? 'text-white' : 'text-[#6c7078]'}`}>
+              <Text
+                className={`text-xs font-bold ${
+                  isActive ? 'text-white' : 'text-[#6c7078]'
+                }`}
+              >
                 {tab.label}
               </Text>
             </TouchableOpacity>
           );
         })}
-      </View>
-
-      {/* Search Field */}
-      <SearchField
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Tìm theo Task ID, GRN ID hoặc SKU..."
-      />
+      </ScrollView>
 
       {errorMsg ? (
-        <View className="bg-[#ffebeb] p-3 mt-3 rounded-xl border border-[#c83a3a]/20 flex-row items-center justify-between">
-          <Text className="text-xs font-semibold text-[#c83a3a] flex-1 mr-2">{errorMsg}</Text>
-          <TouchableOpacity onPress={() => fetchTasks()} className="p-1">
-            <RefreshCw size={16} color={colors.danger} />
+        <Surface className="p-3 mb-3 bg-[#ffebeb] border-[#f8c4c4] flex-row justify-between items-center">
+          <Text className="text-xs text-[#c83a3a] flex-1 font-semibold mr-2">{errorMsg}</Text>
+          <TouchableOpacity onPress={() => fetchAllData(true)} className="p-1">
+            <RefreshCw size={16} color="#c83a3a" />
           </TouchableOpacity>
-        </View>
+        </Surface>
       ) : null}
 
-      {/* Content List */}
+      {/* Product Items List Card */}
       <ScrollView
-        className="flex-1 mt-3"
+        className="flex-1"
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => fetchTasks(true)}
-            colors={[colors.primary]}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={() => fetchAllData(true)} />
         }
       >
         {loading && !refreshing ? (
           <View className="py-12 items-center">
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text className="text-xs text-[#6c7078] mt-3">Tải danh sách lệnh cất hàng...</Text>
+            <ActivityIndicator size="small" color="#0878f9" />
+            <Text className="text-xs text-[#6c7078] mt-2 font-medium">
+              Đang tải danh sách sản phẩm cất hàng...
+            </Text>
           </View>
-        ) : filteredList.length > 0 ? (
-          <Surface>
-            {filteredList.map((item) => {
-              const statusCfg = statusBadgeMap[item.status] || {
-                label: item.status,
-                variant: 'neutral',
-              };
-              const createdStr = item.createdAt
-                ? new Date(item.createdAt).toLocaleDateString('vi-VN')
-                : '';
-              const itemCount = item.items?.length || 0;
+        ) : flatProductItems.length > 0 ? (
+          flatProductItems.map((prod, idx) => {
+            const isDone = prod.status === 'COMPLETED' || prod.remainingQty <= 0;
+            return (
+              <Surface key={idx} className="mb-3 p-4">
+                <TouchableOpacity onPress={() => handleOpenItemMap(prod.task)}>
+                  {/* Line 1: Product Name & Status */}
+                  <View className="flex-row justify-between items-center mb-1">
+                    <Text className="text-sm font-extrabold text-[#101114] flex-1 mr-2" numberOfLines={1}>
+                      {prod.itemName}
+                    </Text>
+                    <StatusBadge
+                      label={isDone ? 'Đã hoàn thành' : 'Đang cất'}
+                      variant={isDone ? 'success' : 'warning'}
+                    />
+                  </View>
 
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => setSelectedTask(item)}
-                  activeOpacity={0.7}
-                >
-                  <ListRow
-                    icon={<Layers size={19} color="#0878f9" />}
-                    title={`Lệnh cất #${item.id.substring(0, 8).toUpperCase()}`}
-                    subtitle={`GRN: ${item.grnNumber || item.grnId || 'N/A'} · ${itemCount} dòng hàng`}
-                    meta={createdStr}
-                    badge={<StatusBadge {...statusCfg} />}
-                  />
+                  {/* Line 2: SKU */}
+                  <Text className="text-xs font-bold text-[#6c7078] mb-2">
+                    SKU: <Text className="font-extrabold text-[#0878f9]">{prod.sku}</Text>
+                  </Text>
+
+                  {/* Line 3: Quantity & Action Button */}
+                  <View className="pt-2.5 border-t border-[#f5f6f8] flex-row justify-between items-center">
+                    <View className="flex-1 mr-2">
+                      <Text className="text-xs text-[#6c7078]" numberOfLines={1}>
+                        {isDone ? (
+                          <>Số lượng: <Text className="text-sm font-extrabold text-[#16a34a]">Đã cất {prod.item.quantity} thùng</Text></>
+                        ) : (
+                          <>Số lượng: <Text className="text-sm font-extrabold text-[#16a34a]">{prod.remainingQty} thùng</Text></>
+                        )}
+                      </Text>
+                    </View>
+
+                    <View
+                      className={`px-4 py-2 rounded-xl shadow-sm items-center justify-center self-start ${
+                        isDone ? 'bg-[#16a34a]' : 'bg-[#0878f9]'
+                      }`}
+                    >
+                      <Text className="text-xs font-extrabold text-white text-center">
+                        {isDone ? 'Xem vị trí' : 'Mở bản đồ'}
+                      </Text>
+                    </View>
+                  </View>
                 </TouchableOpacity>
-              );
-            })}
-          </Surface>
+              </Surface>
+            );
+          })
         ) : (
           <EmptyState
-            title="Không tìm thấy lệnh cất hàng"
-            description={
-              search
-                ? 'Không có lệnh cất hàng nào khớp với từ khóa.'
-                : 'Hiện chưa có lệnh cất hàng (Put-away) nào trong hệ thống.'
-            }
-            actionLabel={search ? 'Xóa từ khóa' : 'Tải lại'}
-            onAction={search ? () => setSearch('') : () => fetchTasks()}
+            title="Không tìm thấy sản phẩm"
+            description="Chưa có sản phẩm cất hàng nào phù hợp với bộ lọc tìm kiếm hiện tại."
           />
         )}
       </ScrollView>
 
-      {/* Detail Modal */}
+      {/* Putaway Execution Detail Modal */}
       <PutawayDetailModal
-        visible={Boolean(selectedTask)}
+        visible={modalVisible}
         task={selectedTask}
-        onClose={() => setSelectedTask(null)}
-        onUpdate={handleTaskUpdated}
+        receipts={receipts}
+        onClose={() => setModalVisible(false)}
+        onUpdate={() => fetchAllData(true)}
       />
     </Screen>
   );

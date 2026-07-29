@@ -1,5 +1,5 @@
-import React from 'react';
-import { Redirect, type Href } from 'expo-router';
+import React, { useEffect } from 'react';
+import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '@/features/auth/context/auth-context';
 import {
   canAccessTab,
@@ -16,11 +16,23 @@ export function ProtectedTab({
   children: React.ReactNode;
 }) {
   const { user, isLoading } = useAuth();
+  const router = useRouter();
+
+  const isAllowed = user ? canAccessTab(user.role, tab) : false;
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (!user) {
+        router.replace('/login');
+      } else if (!isAllowed) {
+        const defaultRoute = getDefaultRouteForRole(user.role);
+        router.replace(`/${defaultRoute}` as Href);
+      }
+    }
+  }, [isLoading, user, isAllowed, router]);
 
   if (isLoading) return <SessionLoading />;
-  if (!user) return <Redirect href="/login" />;
-  if (!canAccessTab(user.role, tab)) {
-    return <Redirect href={`/${getDefaultRouteForRole(user.role)}` as Href} />;
-  }
-  return children;
+  if (!user || !isAllowed) return <SessionLoading />;
+
+  return <>{children}</>;
 }

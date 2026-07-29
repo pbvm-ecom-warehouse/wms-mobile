@@ -1,6 +1,7 @@
-import { apiClient, unwrapData } from '@/shared/lib/api-client';
+import { apiClient, cachedGet, unwrapData } from '@/shared/lib/api-client';
 import type {
   ConfirmPutawayLineInput,
+  NavigationPath,
   PutawaySuggestionInput,
   PutawaySuggestionResponse,
   PutawayTask,
@@ -15,7 +16,74 @@ interface ApiListLike<T> {
   limit?: number;
 }
 
-export async function listPutawayTasks(input: QueryPutawayTasksInput = {}): Promise<PutawayTask[]> {
+export type StorageCellContent = {
+  id: string;
+  sku: string;
+  itemName: string;
+  unit: string;
+  quantity: number;
+  lotNumber?: string | null;
+  expiryDate?: string | null;
+};
+
+export type StorageCellView = {
+  id: string;
+  rackId: string;
+  shelfId?: string;
+  level: number;
+  bay: number;
+  code: string;
+  barcode?: string;
+  status: 'ACTIVE' | 'BLOCKED';
+  usableVolumeCm3?: number;
+  occupiedVolumeCm3?: number;
+  fillPercent: number;
+  contents: StorageCellContent[];
+};
+
+export interface WarehouseLayoutRack {
+  id: string;
+  code: string;
+  name?: string;
+  zoneId?: string;
+  xM?: number;
+  yM?: number;
+  widthM?: number;
+  heightM?: number;
+  depthM?: number;
+  totalCells?: number;
+  fillPercent?: number;
+}
+
+export interface WarehouseLayoutGate {
+  id: string;
+  code: string;
+  name?: string;
+  xM?: number;
+  yM?: number;
+}
+
+export interface WarehouseLayout {
+  racks: WarehouseLayoutRack[];
+  gates?: WarehouseLayoutGate[];
+  zones?: any[];
+}
+
+let putawayTasksCache: { data: PutawayTask[]; timestamp: number; key: string } | null = null;
+
+export function invalidatePutawayCache() {
+  putawayTasksCache = null;
+}
+
+export async function listPutawayTasks(
+  input: QueryPutawayTasksInput = {},
+  forceRefresh = false,
+): Promise<PutawayTask[]> {
+  const cacheKey = JSON.stringify(input);
+  if (!forceRefresh && putawayTasksCache && putawayTasksCache.key === cacheKey && Date.now() - putawayTasksCache.timestamp < 30000) {
+    return putawayTasksCache.data;
+  }
+
   const response = await apiClient.get<ApiListLike<PutawayTask> | PutawayTask[]>('/putaway-tasks', {
     params: {
       limit: input.limit,
@@ -25,20 +93,21 @@ export async function listPutawayTasks(input: QueryPutawayTasksInput = {}): Prom
     },
   });
   const unwrapped = unwrapData<ApiListLike<PutawayTask> | PutawayTask[]>(response.data);
+  let result: PutawayTask[] = [];
   if (Array.isArray(unwrapped)) {
-    return unwrapped;
+    result = unwrapped;
+  } else if (unwrapped && Array.isArray((unwrapped as ApiListLike<PutawayTask>).data)) {
+    result = (unwrapped as ApiListLike<PutawayTask>).data!;
+  } else if (unwrapped && Array.isArray((unwrapped as ApiListLike<PutawayTask>).items)) {
+    result = (unwrapped as ApiListLike<PutawayTask>).items!;
   }
-  if (unwrapped && Array.isArray((unwrapped as ApiListLike<PutawayTask>).data)) {
-    return (unwrapped as ApiListLike<PutawayTask>).data!;
-  }
-  if (unwrapped && Array.isArray((unwrapped as ApiListLike<PutawayTask>).items)) {
-    return (unwrapped as ApiListLike<PutawayTask>).items!;
-  }
-  return [];
+
+  putawayTasksCache = { data: result, timestamp: Date.now(), key: cacheKey };
+  return result;
 }
 
 export async function getPutawayTask(id: string): Promise<PutawayTask> {
-  const response = await apiClient.get<PutawayTask>(`/putaway-tasks/${encodeURIComponent(id)}`);
+  const response = await cachedGet<PutawayTask>(`/putaway-tasks/${encodeURIComponent(id)}`);
   return unwrapData<PutawayTask>(response.data);
 }
 
@@ -46,9 +115,19 @@ export async function confirmPutawayLine(
   taskId: string,
   input: ConfirmPutawayLineInput,
 ): Promise<PutawayTask> {
+  invalidatePutawayCache();
+  const payload: any = {
+    itemBarcode: input.itemBarcode,
+    cellBarcode: input.cellBarcode || input.shelfCode,
+    shelfCode: input.shelfCode || input.cellBarcode,
+    quantity: Math.max(1, Number(input.quantity) || 1),
+  };
+  if (input.suggestedCellId) payload.suggestedCellId = input.suggestedCellId;
+  if (input.lotId) payload.lotId = input.lotId;
+
   const response = await apiClient.post<PutawayTask>(
     `/putaway-tasks/${encodeURIComponent(taskId)}/confirm-line`,
-    input,
+    payload,
   );
   return unwrapData<PutawayTask>(response.data);
 }
@@ -56,11 +135,84 @@ export async function confirmPutawayLine(
 export async function getPutawaySuggestions(
   input: PutawaySuggestionInput,
 ): Promise<PutawaySuggestionResponse> {
-  const response = await apiClient.get<PutawaySuggestionResponse>('/putaway/suggestions', {
-    params: {
-      sku: input.sku,
-      qty: input.quantity,
-    },
-  });
-  return unwrapData<PutawaySuggestionResponse>(response.data);
+  const cleanSku = (input.sku || '').trim();
+  if (!cleanSku) {
+    return { suggestions: [], warning: 'ITEM_NO_DIMENSIONS' };
+  }
+
+  const params: Record<string, any> = {
+    sku: cleanSku,
+    qty: Math.max(1, Number(input.packageCount) || 1),
+  };
+
+  if (input.lotId?.trim()) {
+    params.lotId = input.lotId.trim();
+  }
+
+  if (input.packageSpec) {
+    if (Number.isFinite(input.packageSpec.volumeCm3) && input.packageSpec.volumeCm3 > 0) {
+      params.packageVolumeCm3 = input.packageSpec.volumeCm3;
+    }
+    if (Number.isFinite(input.packageSpec.depthCm) && input.packageSpec.depthCm > 0) {
+      params.packageDepthCm = input.packageSpec.depthCm;
+    }
+    if (Number.isFinite(input.packageSpec.widthCm) && input.packageSpec.widthCm > 0) {
+      params.packageWidthCm = input.packageSpec.widthCm;
+    }
+    if (Number.isFinite(input.packageSpec.heightCm) && input.packageSpec.heightCm > 0) {
+      params.packageHeightCm = input.packageSpec.heightCm;
+    }
+  }
+
+  try {
+    const response = await cachedGet<PutawaySuggestionResponse>('/putaway/suggestions', { params });
+    return unwrapData<PutawaySuggestionResponse>(response.data);
+  } catch {
+    return { suggestions: [], warning: 'NO_SHELF_FITS' };
+  }
 }
+
+export async function fetchWarehouseLayout(): Promise<WarehouseLayout> {
+  try {
+    const response = await cachedGet<any>('/location/layout');
+    const payload = unwrapData<any>(response.data);
+    const layoutData = payload?.data || payload;
+    return {
+      racks: Array.isArray(layoutData?.racks) ? layoutData.racks : [],
+      gates: Array.isArray(layoutData?.gates) ? layoutData.gates : [],
+      zones: Array.isArray(layoutData?.zones) ? layoutData.zones : [],
+    };
+  } catch (err) {
+    console.warn('Lỗi tải sơ đồ /location/layout từ backend:', err);
+    return { racks: [], gates: [], zones: [] };
+  }
+}
+
+export async function listRackCells(rackId: string): Promise<StorageCellView[]> {
+  if (!rackId) return [];
+  try {
+    const response = await cachedGet<any>(
+      `/location/racks/${encodeURIComponent(rackId)}/cells`,
+    );
+    const payload = unwrapData<any>(response.data);
+    const list = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+    return list;
+  } catch (err) {
+    console.warn(`Lỗi tải /location/racks/${rackId}/cells:`, err);
+    return [];
+  }
+}
+
+export async function getNavigationPath(targetRackId: string): Promise<NavigationPath | null> {
+  try {
+    const response = await cachedGet<NavigationPath>('/location/navigation', {
+      params: { targetRackId },
+    });
+    return unwrapData<NavigationPath>(response.data);
+  } catch (err) {
+    console.warn('Lỗi gọi API getNavigationPath:', err);
+    return null;
+  }
+}
+
+export const listPutawaySuggestionResult = getPutawaySuggestions;

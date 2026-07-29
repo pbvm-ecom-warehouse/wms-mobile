@@ -1,12 +1,26 @@
-export type GoodsReceiptNoteStatus = 'DRAFT' | 'CONFIRMED' | 'APPROVED';
+export type GoodsReceiptNoteStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED';
 
 export interface GoodsReceiptNoteItem {
   itemId: string;
   sku: string;
   itemName?: string;
+  barcode?: string;
+  category?: string;
+  type?: string;
+  images?: string[];
+  isPerishable?: boolean;
+  expectedQty?: number;
+  unitPrice?: number;
+  receivedQty?: number;
+  remainingQty?: number;
   actualQty: number;
-  unit: string;
+  unit?: string;
   lotNumber?: string | null;
+  manufacturedDate?: string | null;
   expiryDate?: string | null;
   note?: string | null;
 }
@@ -22,6 +36,11 @@ export interface GoodsReceiptNote {
   images?: string[];
   createdAt: string;
   updatedAt: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  totalPackageCount?: number;
 }
 
 export interface QueryGoodsReceiptNotesInput {
@@ -34,8 +53,8 @@ export interface QueryGoodsReceiptNotesInput {
 export interface CreateGoodsReceiptNoteItemInput {
   itemId: string;
   actualQty: number;
-  unit?: string;
   lotNumber?: string;
+  manufacturedDate: string;
   expiryDate?: string;
   note?: string;
 }
@@ -43,6 +62,7 @@ export interface CreateGoodsReceiptNoteItemInput {
 export interface CreateGoodsReceiptNoteInput {
   purchaseOrderId: string;
   items?: CreateGoodsReceiptNoteItemInput[];
+  images?: string[];
 }
 
 export interface PurchaseOrderItem {
@@ -50,8 +70,11 @@ export interface PurchaseOrderItem {
   sku: string;
   itemName?: string;
   expectedQty: number;
+  receivedQty?: number;
+  remainingQty?: number;
   unit: string;
   unitPrice?: number;
+  isPerishable?: boolean;
 }
 
 export interface PurchaseOrderSummary {

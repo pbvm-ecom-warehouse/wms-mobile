@@ -1,6 +1,10 @@
-import { apiClient, unwrapData } from '@/shared/lib/api-client';
+import { Platform } from 'react-native';
+import { ENV } from '@/shared/config/env';
+import { apiClient, cachedGet, unwrapData } from '@/shared/lib/api-client';
+import { Storage } from '@/shared/lib/storage';
 import type {
   CreateGoodsReceiptNoteInput,
+  CreateGoodsReceiptNoteItemInput,
   GoodsReceiptNote,
   PurchaseOrderItem,
   PurchaseOrderSummary,
@@ -14,9 +18,40 @@ interface ApiListResponse<T> {
   limit: number;
 }
 
+function appendFileToFormData(formData: FormData, uri: string, fieldName = 'images') {
+  if (!uri || typeof uri !== 'string') return;
+  const cleanUri = uri.trim();
+  let filename = cleanUri.split('?')[0].split('/').pop() || 'grn_evidence.jpg';
+  if (!filename.includes('.')) {
+    filename += '.jpg';
+  }
+  const ext = (filename.split('.').pop() || 'jpg').toLowerCase();
+  let mimeType = 'image/jpeg';
+  if (ext === 'png') mimeType = 'image/png';
+  else if (ext === 'webp') mimeType = 'image/webp';
+  else if (ext === 'heic' || ext === 'heif') mimeType = 'image/heic';
+
+  const filePart = {
+    uri: cleanUri,
+    name: String(filename),
+    type: String(mimeType),
+  };
+
+  // @ts-ignore React Native FormData file part structure
+  formData.append(fieldName, filePart);
+}
+
+let grnCache: { data: GoodsReceiptNote[]; timestamp: number; key: string } | null = null;
+
 export async function listGoodsReceiptNotes(
   input: QueryGoodsReceiptNotesInput = {},
+  forceRefresh = false,
 ): Promise<GoodsReceiptNote[]> {
+  const cacheKey = JSON.stringify(input);
+  if (!forceRefresh && grnCache && grnCache.key === cacheKey && Date.now() - grnCache.timestamp < 45000) {
+    return grnCache.data;
+  }
+
   const response = await apiClient.get<ApiListResponse<GoodsReceiptNote> | GoodsReceiptNote[]>('/goods-receipt-notes', {
     params: {
       status: input.status && input.status !== 'ALL' ? input.status : undefined,
@@ -27,13 +62,15 @@ export async function listGoodsReceiptNotes(
   });
 
   const unwrapped = unwrapData<ApiListResponse<GoodsReceiptNote> | GoodsReceiptNote[]>(response.data);
+  let result: GoodsReceiptNote[] = [];
   if (Array.isArray(unwrapped)) {
-    return unwrapped;
+    result = unwrapped;
+  } else if (unwrapped && Array.isArray((unwrapped as ApiListResponse<GoodsReceiptNote>).data)) {
+    result = (unwrapped as ApiListResponse<GoodsReceiptNote>).data;
   }
-  if (unwrapped && Array.isArray((unwrapped as ApiListResponse<GoodsReceiptNote>).data)) {
-    return (unwrapped as ApiListResponse<GoodsReceiptNote>).data;
-  }
-  return [];
+
+  grnCache = { data: result, timestamp: Date.now(), key: cacheKey };
+  return result;
 }
 
 export async function getGoodsReceiptNote(id: string): Promise<GoodsReceiptNote> {
@@ -44,78 +81,96 @@ export async function getGoodsReceiptNote(id: string): Promise<GoodsReceiptNote>
 export async function createGoodsReceiptNote(
   input: CreateGoodsReceiptNoteInput,
 ): Promise<GoodsReceiptNote> {
-  const payload = {
-    purchaseOrderId: input.purchaseOrderId,
-    items: input.items?.map((item) => ({
-      itemId: item.itemId,
-      actualQty: Number(item.actualQty),
-      unit: item.unit,
-      lotNumber: item.lotNumber?.trim() || undefined,
-      expiryDate: item.expiryDate?.trim() || undefined,
-      note: item.note?.trim() || undefined,
-    })),
-  };
+  if (!input.images || input.images.length === 0) {
+    throw new Error('Bắt buộc chụp hoặc chọn ít nhất 1 ảnh minh chứng khi tạo phiếu nhập kho');
+  }
 
-  const response = await apiClient.post<GoodsReceiptNote>('/goods-receipt-notes', payload);
+  // BE dùng ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })
+  // CHỈ gửi các field hợp lệ DTO chấp nhận: itemId, actualQty, lotNumber, manufacturedDate, expiryDate, note.
+  const cleanItems = (input.items || []).map((item) => {
+    const itemObj: any = {
+      itemId: String(item.itemId),
+      actualQty: Number(item.actualQty),
+    };
+    if (item.manufacturedDate && String(item.manufacturedDate).trim()) {
+      itemObj.manufacturedDate = String(item.manufacturedDate).trim();
+    }
+    if (item.lotNumber && String(item.lotNumber).trim()) {
+      itemObj.lotNumber = String(item.lotNumber).trim();
+    }
+    if (item.expiryDate && String(item.expiryDate).trim()) {
+      itemObj.expiryDate = String(item.expiryDate).trim();
+    }
+    if (item.note && String(item.note).trim()) {
+      itemObj.note = String(item.note).trim();
+    }
+    return itemObj;
+  });
+
+  const formData = new FormData();
+  formData.append('purchaseOrderId', String(input.purchaseOrderId));
+  formData.append('items', JSON.stringify(cleanItems));
+
+  for (const uri of input.images) {
+    appendFileToFormData(formData, uri, 'images');
+  }
+
+  const response = await apiClient.post<GoodsReceiptNote>('/goods-receipt-notes', formData);
   return unwrapData<GoodsReceiptNote>(response.data);
 }
 
-export async function confirmGoodsReceiptNote(id: string): Promise<GoodsReceiptNote> {
-  const encId = encodeURIComponent(id);
-  const candidateUrls = [
-    { method: 'post', url: `/goods-receipt-notes/${encId}/confirm` },
-    { method: 'patch', url: `/goods-receipt-notes/${encId}/confirm` },
-    { method: 'put', url: `/goods-receipt-notes/${encId}/confirm` },
-    { method: 'patch', url: `/goods-receipt-notes/${encId}`, data: { status: 'CONFIRMED' } },
-    { method: 'put', url: `/goods-receipt-notes/${encId}`, data: { status: 'CONFIRMED' } },
-    { method: 'post', url: `/goods-receipt-notes/confirm/${encId}` },
-  ];
-
-  let lastError: any;
-  for (const item of candidateUrls) {
-    try {
-      let response;
-      if (item.method === 'post') response = await apiClient.post<GoodsReceiptNote>(item.url, item.data);
-      else if (item.method === 'patch') response = await apiClient.patch<GoodsReceiptNote>(item.url, item.data);
-      else response = await apiClient.put<GoodsReceiptNote>(item.url, item.data);
-      return unwrapData<GoodsReceiptNote>(response.data);
-    } catch (err: any) {
-      lastError = err;
-      if (err?.response?.status !== 404) {
-        throw err;
-      }
+export async function updateGoodsReceiptNoteItems(
+  goodsReceiptNoteId: string,
+  items: CreateGoodsReceiptNoteItemInput[],
+): Promise<GoodsReceiptNote> {
+  const cleanItems = items.map((item) => {
+    const itemObj: any = {
+      itemId: String(item.itemId),
+      actualQty: Number(item.actualQty),
+      manufacturedDate: String(item.manufacturedDate),
+    };
+    if (item.lotNumber && String(item.lotNumber).trim()) {
+      itemObj.lotNumber = String(item.lotNumber).trim();
     }
-  }
-  throw lastError;
+    if (item.expiryDate && String(item.expiryDate).trim()) {
+      itemObj.expiryDate = String(item.expiryDate).trim();
+    }
+    if (item.note && String(item.note).trim()) {
+      itemObj.note = String(item.note).trim();
+    }
+    return itemObj;
+  });
+
+  const response = await apiClient.patch<GoodsReceiptNote>(
+    `/goods-receipt-notes/${encodeURIComponent(goodsReceiptNoteId)}/items`,
+    { items: cleanItems },
+  );
+  return unwrapData<GoodsReceiptNote>(response.data);
+}
+
+export async function submitGoodsReceiptNote(id: string): Promise<GoodsReceiptNote> {
+  const response = await apiClient.post<GoodsReceiptNote>(
+    `/goods-receipt-notes/${encodeURIComponent(id)}/submit`,
+  );
+  return unwrapData<GoodsReceiptNote>(response.data);
 }
 
 export async function approveGoodsReceiptNote(id: string): Promise<GoodsReceiptNote> {
-  const encId = encodeURIComponent(id);
-  const candidateUrls = [
-    { method: 'post', url: `/goods-receipt-notes/${encId}/approve` },
-    { method: 'patch', url: `/goods-receipt-notes/${encId}/approve` },
-    { method: 'put', url: `/goods-receipt-notes/${encId}/approve` },
-    { method: 'patch', url: `/goods-receipt-notes/${encId}`, data: { status: 'APPROVED' } },
-    { method: 'put', url: `/goods-receipt-notes/${encId}`, data: { status: 'APPROVED' } },
-    { method: 'post', url: `/goods-receipt-notes/approve/${encId}` },
-  ];
+  const response = await apiClient.post<GoodsReceiptNote>(
+    `/goods-receipt-notes/${encodeURIComponent(id)}/approve`,
+  );
+  return unwrapData<GoodsReceiptNote>(response.data);
+}
 
-  let lastError: any;
-  for (const item of candidateUrls) {
-    try {
-      let response;
-      if (item.method === 'post') response = await apiClient.post<GoodsReceiptNote>(item.url, item.data);
-      else if (item.method === 'patch') response = await apiClient.patch<GoodsReceiptNote>(item.url, item.data);
-      else response = await apiClient.put<GoodsReceiptNote>(item.url, item.data);
-      return unwrapData<GoodsReceiptNote>(response.data);
-    } catch (err: any) {
-      lastError = err;
-      if (err?.response?.status !== 404) {
-        throw err;
-      }
-    }
-  }
-  throw lastError;
+export async function rejectGoodsReceiptNote(
+  id: string,
+  reason: string,
+): Promise<GoodsReceiptNote> {
+  const response = await apiClient.post<GoodsReceiptNote>(
+    `/goods-receipt-notes/${encodeURIComponent(id)}/reject`,
+    { reason },
+  );
+  return unwrapData<GoodsReceiptNote>(response.data);
 }
 
 export async function deleteGoodsReceiptNote(id: string): Promise<void> {
@@ -127,25 +182,11 @@ export async function uploadGoodsReceiptNoteImage(
   imageUri: string,
 ): Promise<GoodsReceiptNote> {
   const formData = new FormData();
-  const filename = imageUri.split('/').pop() || 'grn_evidence.jpg';
-  const match = /\.(\w+)$/.exec(filename);
-  const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-  // @ts-ignore React Native FormData file payload structure
-  formData.append('file', {
-    uri: imageUri,
-    name: filename,
-    type,
-  });
+  appendFileToFormData(formData, imageUri, 'file');
 
   const response = await apiClient.post<GoodsReceiptNote>(
     `/goods-receipt-notes/${encodeURIComponent(id)}/images`,
     formData,
-    {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    },
   );
   return unwrapData<GoodsReceiptNote>(response.data);
 }
@@ -159,13 +200,10 @@ export async function deleteGoodsReceiptNoteImage(
   newImages?: string[],
 ): Promise<GoodsReceiptNote> {
   const encId = encodeURIComponent(id);
-
-  // Candidate 1: DELETE /goods-receipt-notes/:id/images/:index
   try {
     const response = await apiClient.delete<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images/${index}`);
     return unwrapData<GoodsReceiptNote>(response.data);
   } catch {
-    // Candidate 2: DELETE /goods-receipt-notes/:id/images
     try {
       const response = await apiClient.delete<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images`, {
         data: { index, imageUrl, url: imageUrl, images: newImages },
@@ -173,43 +211,7 @@ export async function deleteGoodsReceiptNoteImage(
       });
       return unwrapData<GoodsReceiptNote>(response.data);
     } catch {
-      // Candidate 3: POST /goods-receipt-notes/:id/images/delete
-      try {
-        const response = await apiClient.post<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images/delete`, {
-          index,
-          imageUrl,
-          url: imageUrl,
-          images: newImages,
-        });
-        return unwrapData<GoodsReceiptNote>(response.data);
-      } catch {
-        // Candidate 4: PUT /goods-receipt-notes/:id/images
-        try {
-          const response = await apiClient.put<GoodsReceiptNote>(`/goods-receipt-notes/${encId}/images`, {
-            images: newImages,
-          });
-          return unwrapData<GoodsReceiptNote>(response.data);
-        } catch {
-          // Candidate 5: PATCH /goods-receipt-notes/:id
-          try {
-            const response = await apiClient.patch<GoodsReceiptNote>(`/goods-receipt-notes/${encId}`, {
-              images: newImages,
-            });
-            return unwrapData<GoodsReceiptNote>(response.data);
-          } catch {
-            // Candidate 6: PUT /goods-receipt-notes/:id
-            try {
-              const response = await apiClient.put<GoodsReceiptNote>(`/goods-receipt-notes/${encId}`, {
-                images: newImages,
-              });
-              return unwrapData<GoodsReceiptNote>(response.data);
-            } catch {
-              // Optimistic fallback for UI update
-              return { id, images: newImages } as any;
-            }
-          }
-        }
-      }
+      return { id, images: newImages } as any;
     }
   }
 }
@@ -217,55 +219,54 @@ export async function deleteGoodsReceiptNoteImage(
 export const deleteGrnImage = deleteGoodsReceiptNoteImage;
 
 export async function listPurchaseOrdersForReceiving(): Promise<PurchaseOrderSummary[]> {
+  let response;
   try {
-    let response;
-    try {
-      response = await apiClient.get('/purchase-orders/receiving');
-    } catch (err: any) {
-      if (err?.response?.status === 404 || err?.response?.status === 403) {
-        response = await apiClient.get('/purchase-orders');
-      } else {
-        throw err;
-      }
-    }
-    const unwrapped = unwrapData<any>(response.data);
-
-    let rawList: any[] = [];
-    if (Array.isArray(unwrapped)) {
-      rawList = unwrapped;
-    } else if (unwrapped && typeof unwrapped === 'object') {
-      if (Array.isArray(unwrapped.data)) rawList = unwrapped.data;
-      else if (Array.isArray(unwrapped.items)) rawList = unwrapped.items;
-      else if (Array.isArray(unwrapped.content)) rawList = unwrapped.content;
-      else if (Array.isArray(unwrapped.purchaseOrders)) rawList = unwrapped.purchaseOrders;
-      else if (Array.isArray(unwrapped.result)) rawList = unwrapped.result;
-    }
-
-    return rawList.map((po: any, index: number) => {
-      const rawItems = po.items || po.details || po.orderItems || po.products || [];
-      const items: PurchaseOrderItem[] = Array.isArray(rawItems)
-        ? rawItems.map((item: any, iIdx: number) => ({
-            itemId: String(item.itemId || item.id || item.productId || `item-${iIdx + 1}`),
-            sku: String(item.sku || item.productSku || item.code || item.productCode || `SKU-${iIdx + 1}`),
-            itemName: item.itemName || item.productName || item.name || item.sku || 'Sản phẩm',
-            expectedQty: Number(item.expectedQty || item.quantity || item.qty || item.orderedQty || 1),
-            unit: item.unit || item.unitName || 'Cái',
-            unitPrice: item.unitPrice || item.price || 0,
-          }))
-        : [];
-
-      return {
-        id: String(po.id || po.purchaseOrderId || `po-${index + 1}`),
-        poNumber: String(po.poNumber || po.code || po.number || po.purchaseOrderNumber || `PO-${index + 1}`),
-        supplierName: po.supplierName || po.supplier?.name || po.supplier || 'Nhà cung cấp',
-        supplierCode: po.supplierCode || po.supplier?.code || '',
-        status: po.status || 'CONFIRMED',
-        orderDate: po.orderDate || po.createdAt || po.date || '',
-        expectedDate: po.expectedDate || po.deliveryDate || '',
-        items,
-      };
-    });
+    response = await apiClient.get('/purchase-orders/receiving');
   } catch (err: any) {
-    throw err;
+    if (err?.response?.status === 404 || err?.response?.status === 403) {
+      response = await apiClient.get('/purchase-orders');
+    } else {
+      throw err;
+    }
   }
+  const unwrapped = unwrapData<any>(response.data);
+
+  let rawList: any[] = [];
+  if (Array.isArray(unwrapped)) {
+    rawList = unwrapped;
+  } else if (unwrapped && typeof unwrapped === 'object') {
+    if (Array.isArray(unwrapped.data)) rawList = unwrapped.data;
+    else if (Array.isArray(unwrapped.items)) rawList = unwrapped.items;
+    else if (Array.isArray(unwrapped.content)) rawList = unwrapped.content;
+    else if (Array.isArray(unwrapped.purchaseOrders)) rawList = unwrapped.purchaseOrders;
+    else if (Array.isArray(unwrapped.result)) rawList = unwrapped.result;
+  }
+
+  return rawList.map((po: any, index: number) => {
+    const rawItems = po.items || po.details || po.orderItems || po.products || [];
+    const items: PurchaseOrderItem[] = Array.isArray(rawItems)
+      ? rawItems.map((item: any, iIdx: number) => ({
+          itemId: String(item.itemId || item.id || item.productId || `item-${iIdx + 1}`),
+          sku: String(item.sku || item.productSku || item.code || item.productCode || `SKU-${iIdx + 1}`),
+          itemName: item.itemName || item.productName || item.name || item.sku || 'Sản phẩm',
+          expectedQty: Number(item.expectedQty || item.quantity || item.qty || item.orderedQty || 1),
+          receivedQty: Number(item.receivedQty || 0),
+          remainingQty: Number(item.remainingQty ?? (Number(item.expectedQty || item.quantity || 1) - Number(item.receivedQty || 0))),
+          unit: item.unit || item.unitName || 'Cái',
+          unitPrice: item.unitPrice || item.price || 0,
+          isPerishable: Boolean(item.isPerishable),
+        }))
+      : [];
+
+    return {
+      id: String(po.id || po.purchaseOrderId || `po-${index + 1}`),
+      poNumber: String(po.poNumber || po.code || po.number || po.purchaseOrderNumber || `PO-${index + 1}`),
+      supplierName: po.supplierName || po.supplier?.name || po.supplier || 'Nhà cung cấp',
+      supplierCode: po.supplierCode || po.supplier?.code || '',
+      status: po.status || 'CONFIRMED',
+      orderDate: po.orderDate || po.createdAt || po.date || '',
+      expectedDate: po.expectedDate || po.deliveryDate || '',
+      items,
+    };
+  });
 }

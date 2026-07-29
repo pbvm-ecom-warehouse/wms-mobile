@@ -1,4 +1,4 @@
-import { apiClient, unwrapData } from '@/shared/lib/api-client';
+import { apiClient, cachedGet, unwrapData } from '@/shared/lib/api-client';
 
 export interface WarehouseItem {
   id: string;
@@ -35,8 +35,8 @@ interface ApiListResponse<T> {
   limit: number;
 }
 
-export async function listProducts(): Promise<WarehouseItem[]> {
-  const response = await apiClient.get<ApiListResponse<WarehouseItem> | WarehouseItem[]>('/stock/items');
+export async function listProducts(forceRefresh = false): Promise<WarehouseItem[]> {
+  const response = await cachedGet<ApiListResponse<WarehouseItem> | WarehouseItem[]>('/stock/items', undefined, { forceRefresh });
   const unwrapped = unwrapData<ApiListResponse<WarehouseItem> | WarehouseItem[]>(response.data);
   if (Array.isArray(unwrapped)) {
     return unwrapped;
@@ -48,6 +48,6 @@ export async function listProducts(): Promise<WarehouseItem[]> {
 }
 
 export async function getProductDetail(id: string): Promise<WarehouseItem> {
-  const response = await apiClient.get<WarehouseItem>(`/stock/items/${encodeURIComponent(id)}`);
+  const response = await cachedGet<WarehouseItem>(`/stock/items/${encodeURIComponent(id)}`);
   return unwrapData<WarehouseItem>(response.data);
 }

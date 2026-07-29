@@ -28,9 +28,16 @@ import {
   X,
 } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
+import { formatApiError } from '@/shared/lib/api-client';
 import { AppButton, StatusBadge } from '@/shared/ui';
-import { createGoodsReceiptNote, listPurchaseOrdersForReceiving, uploadGrnImage } from '../api/grn-api';
+import { createGoodsReceiptNote, listPurchaseOrdersForReceiving } from '../api/grn-api';
 import type { GoodsReceiptNote, PurchaseOrderSummary } from '../types/grn';
+import {
+  formatLotNumber,
+  isCalendarDate,
+  normalizeLotSequence,
+  todayInHoChiMinh,
+} from '../utils/lot-number';
 
 interface CreateGrnModalProps {
   visible: boolean;
@@ -43,11 +50,15 @@ interface DraftItemState {
   sku: string;
   itemName?: string;
   expectedQty: number;
+  remainingQty: number;
   actualQty: string;
   unit: string;
+  manufacturedDate: string;
+  lotSequence: string;
   lotNumber: string;
   expiryDate: string;
   note: string;
+  isPerishable: boolean;
   selected: boolean;
 }
 
@@ -59,12 +70,16 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
   const [draftItems, setDraftItems] = useState<DraftItemState[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [activeDatePickerIndex, setActiveDatePickerIndex] = useState<number | null>(null);
+  const [activeDatePickerIndex, setActiveDatePickerIndex] = useState<{
+    index: number;
+    field: 'manufacturedDate' | 'expiryDate';
+  } | null>(null);
   const [evidenceImages, setEvidenceImages] = useState<string[]>([]);
 
   const handleSelectDate = (dateStr: string) => {
     if (activeDatePickerIndex !== null) {
-      handleItemChange(activeDatePickerIndex, 'expiryDate', dateStr);
+      const { index, field } = activeDatePickerIndex;
+      handleItemChange(index, field, dateStr);
     }
     setActiveDatePickerIndex(null);
   };
@@ -140,14 +155,8 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
       const list = await listPurchaseOrdersForReceiving();
       setPurchaseOrders(list);
     } catch (err: any) {
-      if (err?.response?.status === 403) {
-        setErrorMsg(
-          'Lỗi 403 Forbidden từ Server Deploy: Tài khoản RECEIVER chưa được cấp quyền xem PO. Cần redeploy Backend đã cập nhật @Roles hoặc đăng nhập bằng tài khoản ADMIN / MANAGER.',
-        );
-      } else {
-        const msg = err?.response?.data?.message || err?.message || 'Không thể tải danh sách đơn PO';
-        setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
-      }
+      const msg = err?.response?.data?.message || err?.message || 'Không thể tải danh sách đơn PO';
+      setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
     } finally {
       setLoadingPos(false);
     }
@@ -155,25 +164,45 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
 
   const handleSelectPo = (po: PurchaseOrderSummary) => {
     setSelectedPo(po);
-    const initialItems: DraftItemState[] = (po.items || []).map((item) => ({
-      itemId: item.itemId,
-      sku: item.sku,
-      itemName: item.itemName,
-      expectedQty: item.expectedQty,
-      actualQty: String(item.expectedQty),
-      unit: item.unit || 'Cái',
-      lotNumber: '',
-      expiryDate: '',
-      note: '',
-      selected: true,
-    }));
+    const today = todayInHoChiMinh();
+    const initialItems: DraftItemState[] = (po.items || []).map((item, idx) => {
+      const seq = normalizeLotSequence(idx + 1);
+      const defaultLot = formatLotNumber(today, seq);
+      const targetQty = item.remainingQty != null && item.remainingQty > 0 ? item.remainingQty : item.expectedQty;
+
+      return {
+        itemId: item.itemId,
+        sku: item.sku,
+        itemName: item.itemName,
+        expectedQty: item.expectedQty,
+        remainingQty: item.remainingQty ?? item.expectedQty,
+        actualQty: String(targetQty),
+        unit: item.unit || 'Cái',
+        manufacturedDate: today,
+        lotSequence: seq,
+        lotNumber: defaultLot,
+        expiryDate: '',
+        note: '',
+        isPerishable: Boolean(item.isPerishable),
+        selected: true,
+      };
+    });
     setDraftItems(initialItems);
   };
 
   const handleItemChange = (index: number, key: keyof DraftItemState, value: any) => {
     setDraftItems((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [key]: value };
+      const current = { ...next[index], [key]: value };
+
+      if (key === 'manufacturedDate' || key === 'lotSequence') {
+        const autoLot = formatLotNumber(current.manufacturedDate, current.lotSequence);
+        if (autoLot) {
+          current.lotNumber = autoLot;
+        }
+      }
+
+      next[index] = current;
       return next;
     });
   };
@@ -195,12 +224,59 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
       return;
     }
 
+    const today = todayInHoChiMinh();
+
     for (const item of activeItems) {
       const qtyNum = Number(item.actualQty);
-      if (isNaN(qtyNum) || qtyNum <= 0) {
-        Alert.alert('Số lượng không hợp lệ', `Số lượng thực nhận cho SKU "${item.sku}" phải lớn hơn 0.`);
+      if (isNaN(qtyNum) || qtyNum <= 0 || !Number.isInteger(qtyNum)) {
+        Alert.alert('Số lượng không hợp lệ', `Số thùng/mặt hàng thực nhận cho SKU "${item.sku}" phải là số nguyên lớn hơn 0.`);
         return;
       }
+
+      if (!item.manufacturedDate || !isCalendarDate(item.manufacturedDate)) {
+        Alert.alert('Ngày sản xuất không hợp lệ', `Mặt hàng "${item.itemName || item.sku}" cần có ngày sản xuất đúng định dạng (YYYY-MM-DD).`);
+        return;
+      }
+
+      if (item.manufacturedDate > today) {
+        Alert.alert('Ngày sản xuất không hợp lệ', `Ngày sản xuất cho "${item.itemName || item.sku}" không được sau ngày hiện tại.`);
+        return;
+      }
+
+      if (item.isPerishable && !item.expiryDate) {
+        Alert.alert('Thiếu hạn sử dụng', `Mặt hàng "${item.itemName || item.sku}" có hạn sử dụng — cần nhập hạn sử dụng.`);
+        return;
+      }
+
+      if (item.expiryDate && !isCalendarDate(item.expiryDate)) {
+        Alert.alert('Hạn sử dụng không hợp lệ', `Hạn sử dụng cho "${item.itemName || item.sku}" không đúng định dạng YYYY-MM-DD.`);
+        return;
+      }
+
+      if (item.expiryDate && item.manufacturedDate && item.expiryDate <= item.manufacturedDate) {
+        Alert.alert('Hạn sử dụng không hợp lệ', `Hạn sử dụng cho "${item.itemName || item.sku}" phải sau ngày sản xuất.`);
+        return;
+      }
+    }
+
+    const seenLots = new Set<string>();
+    for (const item of activeItems) {
+      if (item.lotNumber) {
+        const key = `${item.itemId}:${item.lotNumber}`;
+        if (seenLots.has(key)) {
+          Alert.alert('Trùng số lô', `Mặt hàng "${item.itemName || item.sku}" bị trùng số lô (${item.lotNumber}) trong cùng phiếu nhập.`);
+          return;
+        }
+        seenLots.add(key);
+      }
+    }
+
+    if (evidenceImages.length === 0) {
+      Alert.alert(
+        'Bắt buộc có ảnh minh chứng',
+        'Hệ thống yêu cầu bắt buộc chụp hoặc chọn ít nhất 1 ảnh minh chứng khi tạo phiếu nhập kho.',
+      );
+      return;
     }
 
     setSubmitting(true);
@@ -211,22 +287,13 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
         items: activeItems.map((i) => ({
           itemId: i.itemId,
           actualQty: Number(i.actualQty),
-          unit: i.unit,
           lotNumber: i.lotNumber,
-          expiryDate: i.expiryDate,
-          note: i.note,
+          manufacturedDate: i.manufacturedDate,
+          expiryDate: i.expiryDate || undefined,
+          note: i.note || undefined,
         })),
+        images: evidenceImages,
       });
-
-      if (evidenceImages.length > 0) {
-        for (const uri of evidenceImages) {
-          try {
-            await uploadGrnImage(grn.id, uri);
-          } catch (imgErr) {
-            console.warn('Lỗi tải ảnh minh chứng:', imgErr);
-          }
-        }
-      }
 
       Alert.alert(
         'Thành công',
@@ -237,14 +304,7 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
       onSuccess(grn);
       onClose();
     } catch (err: any) {
-      if (err?.response?.status === 403) {
-        setErrorMsg(
-          'Lỗi 403 Forbidden từ Server: Tài khoản hiện tại chưa được phân quyền tạo phiếu nhập kho (POST /goods-receipt-notes). Vui lòng đăng nhập bằng tài khoản Quản lý (MANAGER / ADMIN) hoặc kiểm tra phân quyền tài khoản.',
-        );
-      } else {
-        const msg = err?.response?.data?.message || err?.message || 'Tạo phiếu nhập kho thất bại';
-        setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
-      }
+      setErrorMsg(formatApiError(err));
     } finally {
       setSubmitting(false);
     }
@@ -435,14 +495,14 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
 
                     <View className="bg-[#f5f6f8] px-2 py-1 rounded-lg border border-[#e4e5e9]">
                       <Text className="text-xs font-bold text-[#6c7078]">
-                        PO đặt: {item.expectedQty} {item.unit}
+                        Còn lại: {item.remainingQty} {item.unit} (Đặt {item.expectedQty})
                       </Text>
                     </View>
                   </View>
 
                   {item.selected ? (
                     <View>
-                      {/* Quantity & Lot Number Inputs */}
+                      {/* Quantity & Manufactured Date */}
                       <View className="flex-row gap-2 mt-2">
                         <View className="flex-1">
                           <Text className="text-xs font-semibold text-[#6c7078] mb-1">
@@ -453,16 +513,58 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                             keyboardType="numeric"
                             value={item.actualQty}
                             onChangeText={(val) => handleItemChange(index, 'actualQty', val)}
-                            placeholder="Số lượng thực nhập"
+                            placeholder="Số lượng thùng/cái"
                           />
                         </View>
                         <View className="flex-1">
-                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">Số Lô (Lot Number)</Text>
+                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">
+                            Ngày Sản Xuất <Text className="text-[#ef4444]">*</Text>
+                          </Text>
+                          {Platform.OS === 'web' ? (
+                            <TextInput
+                              className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
+                              // @ts-ignore
+                              type="date"
+                              value={item.manufacturedDate}
+                              onChangeText={(val) => handleItemChange(index, 'manufacturedDate', val)}
+                            />
+                          ) : (
+                            <TouchableOpacity
+                              activeOpacity={0.7}
+                              onPress={() => setActiveDatePickerIndex({ index, field: 'manufacturedDate' })}
+                              className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 flex-row items-center justify-between"
+                            >
+                              <View className="flex-row items-center flex-1">
+                                <Calendar size={16} color="#6c7078" className="mr-1.5" />
+                                <Text className="text-xs font-medium text-[#101114]">
+                                  {item.manufacturedDate || 'YYYY-MM-DD'}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+
+                      {/* Lot Sequence & Auto Lot Number */}
+                      <View className="flex-row gap-2 mt-2">
+                        <View className="w-1/3">
+                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">SEQ (001-999)</Text>
                           <TextInput
                             className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
+                            keyboardType="numeric"
+                            maxLength={3}
+                            value={item.lotSequence}
+                            onChangeText={(val) => handleItemChange(index, 'lotSequence', val)}
+                            placeholder="001"
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">Số Lô (LOT-YYMMDD-SEQ)</Text>
+                          <TextInput
+                            className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114] font-semibold"
                             value={item.lotNumber}
                             onChangeText={(val) => handleItemChange(index, 'lotNumber', val)}
-                            placeholder="VD: LOT-20260727"
+                            placeholder="LOT-260728-001"
                           />
                         </View>
                       </View>
@@ -470,7 +572,9 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                       {/* Expiry Date & Note Inputs */}
                       <View className="flex-row gap-2 mt-2">
                         <View className="flex-1">
-                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">Hạn Sử Dụng</Text>
+                          <Text className="text-xs font-semibold text-[#6c7078] mb-1">
+                            Hạn Sử Dụng {item.isPerishable ? <Text className="text-[#ef4444]">*</Text> : null}
+                          </Text>
                           {Platform.OS === 'web' ? (
                             <TextInput
                               className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 text-xs text-[#101114]"
@@ -482,7 +586,7 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
                           ) : (
                             <TouchableOpacity
                               activeOpacity={0.7}
-                              onPress={() => setActiveDatePickerIndex(index)}
+                              onPress={() => setActiveDatePickerIndex({ index, field: 'expiryDate' })}
                               className="bg-[#f5f6f8] border border-[#e4e5e9] rounded-xl px-3 py-2 flex-row items-center justify-between"
                             >
                               <View className="flex-row items-center flex-1">
@@ -597,7 +701,11 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
 
       <DatePickerModal
         visible={activeDatePickerIndex !== null}
-        value={activeDatePickerIndex !== null ? draftItems[activeDatePickerIndex]?.expiryDate : ''}
+        value={
+          activeDatePickerIndex !== null
+            ? draftItems[activeDatePickerIndex.index]?.[activeDatePickerIndex.field]
+            : ''
+        }
         onSelect={handleSelectDate}
         onClose={() => setActiveDatePickerIndex(null)}
       />
@@ -689,7 +797,7 @@ function DatePickerModal({ visible, value, onSelect, onClose }: DatePickerModalP
         <TouchableOpacity activeOpacity={1} className="w-full max-w-[360px] bg-white rounded-2xl p-4 shadow-lg">
           {/* Header */}
           <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-base font-bold text-[#101114]">Chọn Hạn Sử Dụng</Text>
+            <Text className="text-base font-bold text-[#101114]">Chọn Ngày</Text>
             <TouchableOpacity onPress={onClose} className="p-1.5 rounded-full bg-[#f5f6f8]">
               <X size={18} color="#6c7078" />
             </TouchableOpacity>
@@ -708,9 +816,6 @@ function DatePickerModal({ visible, value, onSelect, onClose }: DatePickerModalP
             </TouchableOpacity>
             <TouchableOpacity className="bg-[#eaf3ff] px-3 py-1.5 rounded-full mr-2" onPress={() => handlePreset(12)}>
               <Text className="text-xs font-semibold text-[#0878f9]">+1 Năm</Text>
-            </TouchableOpacity>
-            <TouchableOpacity className="bg-[#eaf3ff] px-3 py-1.5 rounded-full mr-2" onPress={() => handlePreset(24)}>
-              <Text className="text-xs font-semibold text-[#0878f9]">+2 Năm</Text>
             </TouchableOpacity>
           </ScrollView>
 

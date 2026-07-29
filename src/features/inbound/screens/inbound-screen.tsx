@@ -26,12 +26,13 @@ import { GrnDetailModal } from '../components/grn-detail-modal';
 import type { GoodsReceiptNote, GoodsReceiptNoteStatus } from '../types/grn';
 
 const statusBadgeMap: Record<
-  GoodsReceiptNoteStatus,
-  { label: string; variant: 'neutral' | 'warning' | 'success' }
+  string,
+  { label: string; variant: 'neutral' | 'warning' | 'success' | 'danger' }
 > = {
   DRAFT: { label: 'Nháp', variant: 'neutral' },
-  CONFIRMED: { label: 'Xác nhận', variant: 'warning' },
+  PENDING_APPROVAL: { label: 'Chờ duyệt', variant: 'warning' },
   APPROVED: { label: 'Đã duyệt', variant: 'success' },
+  REJECTED: { label: 'Từ chối', variant: 'danger' },
 };
 
 type FilterStatus = 'ALL' | GoodsReceiptNoteStatus;
@@ -39,8 +40,9 @@ type FilterStatus = 'ALL' | GoodsReceiptNoteStatus;
 const filterTabs: { key: FilterStatus; label: string }[] = [
   { key: 'ALL', label: 'Tất cả' },
   { key: 'DRAFT', label: 'Nháp' },
-  { key: 'CONFIRMED', label: 'Xác nhận' },
+  { key: 'PENDING_APPROVAL', label: 'Chờ duyệt' },
   { key: 'APPROVED', label: 'Đã duyệt' },
+  { key: 'REJECTED', label: 'Từ chối' },
 ];
 
 export function InboundScreen() {
@@ -59,7 +61,8 @@ export function InboundScreen() {
   const userRole = user?.role?.toUpperCase();
   const canCreate =
     userRole === WmsRole.RECEIVER ||
-    userRole === WmsRole.ADMIN;
+    userRole === WmsRole.ADMIN ||
+    userRole === WmsRole.MANAGER;
 
   const fetchGrns = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -134,14 +137,14 @@ export function InboundScreen() {
       />
 
       {/* Filter Tabs */}
-      <View className="flex-row gap-2 mb-3">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row mb-3 max-h-9">
         {filterTabs.map((tab) => {
           const isActive = activeStatus === tab.key;
           return (
             <TouchableOpacity
               key={tab.key}
               onPress={() => setActiveStatus(tab.key)}
-              className={`px-3 py-1.5 rounded-full border ${
+              className={`px-3 py-1.5 rounded-full border mr-2 ${
                 isActive
                   ? 'bg-[#0878f9] border-[#0878f9]'
                   : 'bg-white border-[#e4e5e9]'
@@ -157,7 +160,7 @@ export function InboundScreen() {
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {/* Search Input */}
       <SearchField

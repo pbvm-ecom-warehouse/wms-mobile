@@ -1,4 +1,4 @@
-import { apiClient, unwrapData } from '@/shared/lib/api-client';
+import { apiClient, cachedGet, unwrapData } from '@/shared/lib/api-client';
 
 export type PrintJobStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
@@ -20,8 +20,8 @@ interface ApiListResponse<T> {
   limit: number;
 }
 
-export async function listPrintJobs(): Promise<PrintJob[]> {
-  const response = await apiClient.get<ApiListResponse<PrintJob> | PrintJob[]>('/print-jobs');
+export async function listPrintJobs(forceRefresh = false): Promise<PrintJob[]> {
+  const response = await cachedGet<ApiListResponse<PrintJob> | PrintJob[]>('/print-jobs', undefined, { forceRefresh });
   const unwrapped = unwrapData<ApiListResponse<PrintJob> | PrintJob[]>(response.data);
   if (Array.isArray(unwrapped)) {
     return unwrapped;

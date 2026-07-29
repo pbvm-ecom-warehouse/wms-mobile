@@ -19,7 +19,7 @@ import { colors } from '@/shared/theme/tokens';
 const screens: {
   name: AppTab;
   title: string;
-  icon: React.ComponentType<{ size?: number; color?: string }>;
+  icon: React.ComponentType<any>;
 }[] = [
   { name: 'dashboard', title: 'Tổng quan', icon: LayoutDashboard },
   { name: 'products', title: 'Sản phẩm', icon: Box },
@@ -41,46 +41,38 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          position: 'absolute',
-          left: 16,
-          right: 16,
-          bottom: 12,
-          height: 68,
-          paddingTop: 7,
-          paddingBottom: 7,
-          borderTopWidth: 0,
-          borderRadius: 24,
-          backgroundColor: colors.surface,
-          elevation: 10,
-          shadowColor: '#6b7280',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.18,
-          shadowRadius: 18,
+          backgroundColor: '#ffffff',
+          height: 60,
+          borderTopWidth: 1,
+          borderColor: '#e2e8f0',
+          paddingBottom: 8,
+          paddingTop: 8,
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        tabBarItemStyle: { borderRadius: 18 },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
-        tabBarActiveBackgroundColor: colors.primarySoft,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveTintColor: '#0878f9',
+        tabBarInactiveTintColor: '#64748b',
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+        },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="index" options={{ href: null }} />
       {screens.map((screen) => {
-        const Icon = screen.icon;
-        const allowed = user ? canAccessTab(user.role, screen.name) : false;
+        const isAccessible = canAccessTab(user?.role || ('' as any), screen.name);
+        const IconComponent = screen.icon;
+
         return (
           <Tabs.Screen
             key={screen.name}
             name={screen.name}
             options={{
               title: screen.title,
-              href: allowed ? `/${screen.name}` : null,
-              tabBarIcon: ({ color, size }) => <Icon color={String(color)} size={size} />,
+              href: isAccessible ? undefined : null,
+              tabBarIcon: ({ color, size }) => (
+                <IconComponent size={size || 20} color={color} />
+              ),
             }}
           />
         );
