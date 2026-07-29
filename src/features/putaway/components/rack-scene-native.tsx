@@ -8,6 +8,10 @@ import {
   getRackMeasurements,
   packCellBoxes,
 } from "../utils/rack-3d-layout";
+import {
+  patchExpoGlPixelStore,
+  type ExpoGlPixelStoreContext,
+} from "../utils/expo-gl-compat";
 
 function skuColor(sku: string) {
   let hash = 0;
@@ -172,6 +176,11 @@ export function RackSceneNative(props: {
         fov: 38,
       }}
       gl={{ antialias: true }}
+      onCreated={({ gl }) => {
+        patchExpoGlPixelStore(
+          gl.getContext() as unknown as ExpoGlPixelStoreContext,
+        );
+      }}
     >
       <color attach="background" args={["#eef3f7"]} />
       <ambientLight intensity={1.15} />
