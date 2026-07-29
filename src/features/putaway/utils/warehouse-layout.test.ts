@@ -1,4 +1,9 @@
-import { getRackRect, normalizeWarehouseLayout } from "./warehouse-layout";
+import {
+  buildRackRoutePoints,
+  getRackAccessPoint,
+  getRackRect,
+  normalizeWarehouseLayout,
+} from "./warehouse-layout";
 
 describe("warehouse layout normalization", () => {
   it("uses rack depth as plan height when rotation is zero", () => {
@@ -101,5 +106,57 @@ describe("warehouse layout normalization", () => {
     expect(layout.aisles).toHaveLength(1);
     expect(layout.gates[0].code).toBe("GATE-01");
     expect(layout.racks[0].rotation).toBe(0);
+  });
+
+  it("uses the selected rack access point as the route endpoint", () => {
+    const gate = { id: "gate-01", code: "GATE-01", xM: 18, yM: 23 };
+    const rack = {
+      id: "rack-10",
+      code: "RACK-10",
+      xM: 19.5,
+      yM: 4.8,
+      widthM: 7,
+      depthM: 1.8,
+      rotation: 0 as const,
+      accessPoint: { xM: 23, yM: 7.2 },
+    };
+
+    const points = buildRackRoutePoints(gate, rack);
+
+    expect(points.at(-1)).toEqual({ xM: 23, yM: 7.2 });
+  });
+
+  it("falls back to the nearest rack edge center when access point is missing", () => {
+    const point = getRackAccessPoint(
+      {
+        id: "rack-02",
+        code: "RACK-02",
+        xM: 23.4,
+        yM: 14,
+        widthM: 1.8,
+        heightM: 8.5,
+      },
+      { xM: 18.4, yM: 23.5 },
+    );
+
+    expect(point.xM).toBeCloseTo(24.3);
+    expect(point.yM).toBeCloseTo(22.5);
+  });
+
+  it("routes to the nearest rack edge when backend access point is missing", () => {
+    const points = buildRackRoutePoints(
+      { xM: 18.4, yM: 23.5 },
+      {
+        id: "rack-02",
+        code: "RACK-02",
+        xM: 23.4,
+        yM: 14,
+        widthM: 1.8,
+        heightM: 8.5,
+      },
+    );
+
+    expect(points.at(-1)?.xM).toBeCloseTo(24.3);
+    expect(points.at(-1)?.yM).toBeCloseTo(22.5);
   });
 });

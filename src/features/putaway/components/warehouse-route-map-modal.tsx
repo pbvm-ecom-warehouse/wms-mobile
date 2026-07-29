@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Defs, G, Path, Pattern, Polyline, Rect, Text as SvgText } from 'react-native-svg';
-import { Navigation, X } from 'lucide-react-native';
+import { Maximize2, Minus, Navigation, Plus, X } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
 import { fetchWarehouseLayout, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
 import type { NavigationPath } from '../types/putaway';
-import { getRackRect } from '../utils/warehouse-layout';
+import { buildRackRoutePoints, calculateRouteDistance, getRackRect } from '../utils/warehouse-layout';
 import { RackCellViewerModal } from './rack-cell-viewer-modal';
 
 export interface WarehouseRouteMapModalProps {
@@ -237,6 +237,7 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
   const [layout, setLayout] = useState<WarehouseLayout>(fallbackLayout);
   const [loading, setLoading] = useState(false);
   const [rackViewerOpen, setRackViewerOpen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   useEffect(() => {
     if (visible) {
@@ -267,12 +268,25 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
   const canvas = layout.canvas;
   const gates = layout.gates.length > 0 ? layout.gates : [defaultGate];
   const startGate = gates.find((gate) => gate.code === path?.startGateCode) ?? gates[0];
-  const points = path?.points || [{ xM: startGate.xM, yM: startGate.yM }, { xM: startGate.xM, yM: Math.max(0, startGate.yM - 8.6) }, selectedRack?.accessPoint ?? { xM: 26.8, yM: 14.9 }];
+  const selectedPathMatches = selectedRack ? path?.targetRackId === selectedRack.id || path?.targetRackId === selectedRack.code : false;
+  const points = selectedPathMatches && path?.points?.length ? path.points : selectedRack ? buildRackRoutePoints(startGate, selectedRack) : [];
 
   const routePolylinePoints = points.map((p) => `${p.xM},${p.yM}`).join(' ');
-  const distance = path?.distanceM ?? 25.3;
+  const distance = selectedPathMatches && path?.distanceM ? path.distanceM : calculateRouteDistance(points);
   const gateCode = path?.startGateCode ?? startGate.code;
   const currentRackCode = selectedRack?.code || 'RACK-02';
+  const viewBoxWidth = (canvas.widthM + 2) / zoomLevel;
+  const viewBoxHeight = (canvas.heightM + 2) / zoomLevel;
+  const routeCenter =
+    points.length > 0
+      ? {
+          xM: points.reduce((total, point) => total + point.xM, 0) / points.length,
+          yM: points.reduce((total, point) => total + point.yM, 0) / points.length,
+        }
+      : { xM: canvas.widthM / 2, yM: canvas.heightM / 2 };
+  const viewBoxX = Math.max(-1, Math.min(canvas.widthM + 1 - viewBoxWidth, routeCenter.xM - viewBoxWidth / 2));
+  const viewBoxY = Math.max(-1, Math.min(canvas.heightM + 1 - viewBoxHeight, routeCenter.yM - viewBoxHeight / 2));
+  const viewBox = `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`;
 
   const handleRackPress = (rack: WarehouseLayoutRack) => {
     setSelectedRack(rack);
@@ -281,6 +295,10 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
   const handleOpenRackViewer = () => {
     setRackViewerOpen(true);
   };
+
+  const handleZoomIn = () => setZoomLevel((value) => Math.min(2.5, Number((value + 0.25).toFixed(2))));
+  const handleZoomOut = () => setZoomLevel((value) => Math.max(1, Number((value - 0.25).toFixed(2))));
+  const handleResetZoom = () => setZoomLevel(1);
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -307,24 +325,36 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
           </View>
 
           {/* SVG Canvas Map matching Web Image 3 Layout Grid */}
-          <View className="p-2 bg-[#edf2f4] items-center justify-center">
+          <View className="px-2 py-3 bg-[#edf2f4] items-center justify-center">
             {loading ? (
               <View className="py-20 items-center justify-center">
                 <ActivityIndicator size="large" color="#0878f9" />
                 <Text className="text-xs text-[#64748b] mt-2">Đang tải sơ đồ kho từ máy chủ backend...</Text>
               </View>
             ) : (
-              <Svg width="100%" height="300" viewBox={`-1 -1 ${canvas.widthM + 2} ${canvas.heightM + 2}`} preserveAspectRatio="xMidYMid meet">
-                <Defs>
-                  <Pattern id="operation-grid-mobile" width={canvas.gridM} height={canvas.gridM} patternUnits="userSpaceOnUse">
-                    <Path d={`M ${canvas.gridM} 0 L 0 0 0 ${canvas.gridM}`} fill="none" stroke="#cbd5e1" strokeWidth="0.025" />
-                  </Pattern>
-                </Defs>
-                {/* Outer Border */}
-                <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="#ffffff" stroke="#334155" strokeWidth="0.18" />
-                <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="url(#operation-grid-mobile)" />
+              <View className="w-full">
+                <View className="absolute right-2 top-2 z-10 flex-row bg-white/95 rounded-xl border border-[#cbd5e1] overflow-hidden">
+                  <TouchableOpacity onPress={handleZoomOut} className="p-2 border-r border-[#e2e8f0]" accessibilityLabel="Thu nhỏ bản đồ">
+                    <Minus size={15} color="#334155" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleResetZoom} className="p-2 border-r border-[#e2e8f0]" accessibilityLabel="Đặt lại zoom bản đồ">
+                    <Maximize2 size={15} color="#334155" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleZoomIn} className="p-2" accessibilityLabel="Phóng to bản đồ">
+                    <Plus size={15} color="#334155" />
+                  </TouchableOpacity>
+                </View>
+                <Svg width="100%" height="390" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
+                  <Defs>
+                    <Pattern id="operation-grid-mobile" width={canvas.gridM} height={canvas.gridM} patternUnits="userSpaceOnUse">
+                      <Path d={`M ${canvas.gridM} 0 L 0 0 0 ${canvas.gridM}`} fill="none" stroke="#cbd5e1" strokeWidth="0.025" />
+                    </Pattern>
+                  </Defs>
+                  {/* Outer Border */}
+                  <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="#ffffff" stroke="#334155" strokeWidth="0.18" />
+                  <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="url(#operation-grid-mobile)" />
 
-                {layout.zones.map((zone) => (
+                  {layout.zones.map((zone) => (
                   <Rect
                     key={zone.id}
                     x={zone.xM}
@@ -339,7 +369,7 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                 ))}
 
                 {/* Aisles Corridors */}
-                {layout.aisles.map((aisle) => (
+                  {layout.aisles.map((aisle) => (
                   <G key={aisle.code}>
                     <Rect x={aisle.xM} y={aisle.yM} width={aisle.widthM} height={aisle.heightM} fill={aisle.type === 'MAIN' ? '#dbe4e7' : '#eef2f3'} stroke="#cbd5e1" strokeWidth="0.04" />
                     <SvgText x={aisle.xM + aisle.widthM / 2} y={aisle.yM + aisle.heightM / 2 + 0.15} fontSize="0.45" fontWeight="bold" fill="#64748b" textAnchor="middle">
@@ -349,11 +379,11 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                 ))}
 
                 {/* Racks */}
-                {racks.map((rack) => {
+                  {racks.map((rack) => {
                   const isTarget = currentRackCode === rack.code;
                   const rect = getRackRect(rack);
                   return (
-                    <G key={rack.id || rack.code} onPress={() => handleRackPress(rack)}>
+                    <G key={rack.id || rack.code}>
                       <Rect
                         x={rect.xM}
                         y={rect.yM}
@@ -363,8 +393,9 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                         fill={isTarget ? '#f59e0b' : '#cbd5e1'}
                         stroke={isTarget ? '#b45309' : '#475569'}
                         strokeWidth={isTarget ? '0.3' : '0.1'}
+                        onPress={() => handleRackPress(rack)}
                       />
-                      <SvgText x={rect.xM + rect.widthM / 2} y={rect.yM + rect.heightM / 2 + 0.25} fontSize="0.55" fontWeight="bold" fill={isTarget ? '#78350f' : '#1e293b'} textAnchor="middle">
+                      <SvgText x={rect.xM + rect.widthM / 2} y={rect.yM + rect.heightM / 2 + 0.25} fontSize="0.55" fontWeight="bold" fill={isTarget ? '#78350f' : '#1e293b'} textAnchor="middle" onPress={() => handleRackPress(rack)}>
                         {rack.code}
                       </SvgText>
                     </G>
@@ -372,7 +403,7 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                 })}
 
                 {/* Route Polyline Path */}
-                {routePolylinePoints ? (
+                  {routePolylinePoints ? (
                   <>
                     <Polyline points={routePolylinePoints} fill="none" stroke="#2563eb" strokeWidth="0.45" strokeDasharray="0.6 0.3" strokeLinecap="round" strokeLinejoin="round" />
                     {points.map((pt, idx) => (
@@ -390,7 +421,7 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                 ) : null}
 
                 {/* Gate Markers */}
-                {gates.map((gate) => (
+                  {gates.map((gate) => (
                   <G key={gate.id}>
                     <Circle cx={gate.xM} cy={gate.yM} r="0.55" fill="#0f766e" stroke="#ffffff" strokeWidth="0.1" />
                     <SvgText x={gate.xM} y={gate.yM - 0.8} fontSize="0.5" fontWeight="bold" fill="#0f766e" textAnchor="middle">
@@ -398,24 +429,9 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                     </SvgText>
                   </G>
                 ))}
-              </Svg>
+                </Svg>
+              </View>
             )}
-          </View>
-
-          {/* Quick Horizontal Racks Selector */}
-          <View className="px-3 py-2 bg-white border-t border-[#e4e5e9]">
-            <Text className="text-[10px] font-bold text-[#64748b] mb-1.5 uppercase">Danh sách Kệ (Nhấn vào kệ trên bản đồ để chọn):</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-1.5">
-              {racks.map((r) => (
-                <TouchableOpacity
-                  key={r.id || r.code}
-                  onPress={() => handleRackPress(r)}
-                  className={`px-2.5 py-1 rounded-lg border mr-1 ${currentRackCode === r.code ? 'bg-[#fef3c7] border-[#d97706]' : 'bg-[#f8fafc] border-[#e2e8f0]'}`}
-                >
-                  <Text className={`text-xs font-bold ${currentRackCode === r.code ? 'text-[#b45309]' : 'text-[#334155]'}`}>{r.code}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
           </View>
 
           {/* Footer Bar matching Web Image 3 */}
