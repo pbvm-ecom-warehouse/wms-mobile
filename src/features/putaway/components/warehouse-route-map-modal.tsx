@@ -5,7 +5,7 @@ import { Maximize2, Minus, Navigation, Plus, X } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
 import { fetchWarehouseLayout, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
 import type { NavigationPath } from '../types/putaway';
-import { buildRackRoutePoints, calculateRouteDistance, getRackRect } from '../utils/warehouse-layout';
+import { buildRackRoutePoints, calculateRouteDistance, getRackRect, isFiniteLayoutPoint } from '../utils/warehouse-layout';
 import { RackCellViewerModal } from './rack-cell-viewer-modal';
 
 export interface WarehouseRouteMapModalProps {
@@ -269,7 +269,8 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
   const gates = layout.gates.length > 0 ? layout.gates : [defaultGate];
   const startGate = gates.find((gate) => gate.code === path?.startGateCode) ?? gates[0];
   const selectedPathMatches = selectedRack ? path?.targetRackId === selectedRack.id || path?.targetRackId === selectedRack.code : false;
-  const points = selectedPathMatches && path?.points?.length ? path.points : selectedRack ? buildRackRoutePoints(startGate, selectedRack) : [];
+  const apiPoints = selectedPathMatches && path?.points?.length && path.points.every(isFiniteLayoutPoint) ? path.points : null;
+  const points = apiPoints ?? (selectedRack ? buildRackRoutePoints(startGate, selectedRack) : []);
 
   const routePolylinePoints = points.map((p) => `${p.xM},${p.yM}`).join(' ');
   const distance = selectedPathMatches && path?.distanceM ? path.distanceM : calculateRouteDistance(points);

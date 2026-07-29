@@ -159,4 +159,35 @@ describe("warehouse layout normalization", () => {
     expect(points.at(-1)?.xM).toBeCloseTo(24.3);
     expect(points.at(-1)?.yM).toBeCloseTo(22.5);
   });
+
+  it("normalizes numeric strings and replaces invalid layout numbers", () => {
+    const layout = normalizeWarehouseLayout({
+      data: {
+        canvas: { widthM: "55", heightM: null, gridM: "0.5" },
+        racks: [
+          {
+            id: "rack-27",
+            code: "RACK-27",
+            xM: "27.5",
+            yM: "12.5",
+            widthM: null,
+            depthM: "1.8",
+            accessPoint: { xM: "27.5", yM: undefined },
+          },
+        ],
+        aisles: [],
+        gates: [{ id: "gate-01", code: "GATE-01", xM: "24", yM: "25" }],
+      },
+    });
+
+    expect(layout.canvas).toEqual({ widthM: 55, heightM: 24, gridM: 0.5 });
+    expect(getRackRect(layout.racks[0])).toEqual({
+      xM: 27.5,
+      yM: 12.5,
+      widthM: 2,
+      heightM: 1.8,
+    });
+    expect(layout.racks[0].accessPoint).toBeUndefined();
+    expect(layout.gates[0]).toMatchObject({ xM: 24, yM: 25 });
+  });
 });

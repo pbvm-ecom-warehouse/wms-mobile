@@ -142,6 +142,10 @@ export function calculateRouteDistance(points: LayoutPoint[]): number {
   }, 0);
 }
 
+export function isFiniteLayoutPoint(point: LayoutPoint): boolean {
+  return Number.isFinite(point.xM) && Number.isFinite(point.yM);
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -150,6 +154,76 @@ function record(value: unknown): Record<string, unknown> {
 
 function array<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function number(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function string(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function rotation(value: unknown): WarehouseLayoutRotation {
+  return value === 90 || value === "90" ? 90 : 0;
+}
+
+function accessPoint(value: unknown): LayoutPoint | undefined {
+  const point = record(value);
+  const xM = number(point.xM, NaN);
+  const yM = number(point.yM, NaN);
+  return Number.isFinite(xM) && Number.isFinite(yM) ? { xM, yM } : undefined;
+}
+
+function normalizeRack(value: unknown, index: number): WarehouseLayoutRack {
+  const rack = record(value);
+  const code = string(rack.code, `RACK-${String(index + 1).padStart(2, "0")}`);
+  const normalizedAccessPoint = accessPoint(rack.accessPoint);
+
+  return {
+    id: string(rack.id, code),
+    zoneId: typeof rack.zoneId === "string" ? rack.zoneId : undefined,
+    code,
+    name: typeof rack.name === "string" ? rack.name : undefined,
+    xM: number(rack.xM, 0),
+    yM: number(rack.yM, 0),
+    widthM: number(rack.widthM, 2),
+    depthM: rack.depthM == null ? undefined : number(rack.depthM, 2),
+    heightM: rack.heightM == null ? undefined : number(rack.heightM, 2),
+    rotation: rotation(rack.rotation),
+    levelCount: rack.levelCount == null ? undefined : number(rack.levelCount, 0),
+    bayCount: rack.bayCount == null ? undefined : number(rack.bayCount, 0),
+    shelfCodes: Array.isArray(rack.shelfCodes) ? rack.shelfCodes.filter((item): item is string => typeof item === "string") : undefined,
+    accessPoint: normalizedAccessPoint,
+  };
+}
+
+function normalizeAisle(value: unknown, index: number): WarehouseLayoutAisle {
+  const aisle = record(value);
+  const code = string(aisle.code, `AISLE-${String(index + 1).padStart(2, "0")}`);
+  return {
+    id: string(aisle.id, code),
+    code,
+    type: aisle.type === "RACK" ? "RACK" : "MAIN",
+    xM: number(aisle.xM, 0),
+    yM: number(aisle.yM, 0),
+    widthM: number(aisle.widthM, 1),
+    heightM: number(aisle.heightM, 1),
+  };
+}
+
+function normalizeGate(value: unknown, index: number): WarehouseLayoutGate {
+  const gate = record(value);
+  const code = string(gate.code, `GATE-${String(index + 1).padStart(2, "0")}`);
+  return {
+    id: string(gate.id, code),
+    code,
+    label: typeof gate.label === "string" ? gate.label : undefined,
+    name: typeof gate.name === "string" ? gate.name : undefined,
+    xM: number(gate.xM, 0),
+    yM: number(gate.yM, 0),
+  };
 }
 
 export function normalizeWarehouseLayout(payload: unknown): WarehouseLayout {
@@ -174,19 +248,19 @@ export function normalizeWarehouseLayout(payload: unknown): WarehouseLayout {
         ? source.status
         : undefined,
     canvas: {
-      widthM: typeof canvas.widthM === "number" ? canvas.widthM : 36,
-      heightM: typeof canvas.heightM === "number" ? canvas.heightM : 24,
-      gridM: typeof canvas.gridM === "number" ? canvas.gridM : 1,
+      widthM: number(canvas.widthM, 36),
+      heightM: number(canvas.heightM, 24),
+      gridM: number(canvas.gridM, 1),
     },
     rackTemplate:
       source.rackTemplate && typeof source.rackTemplate === "object"
         ? (source.rackTemplate as WarehouseLayout["rackTemplate"])
         : undefined,
     zones: array<WarehouseLayoutZone>(source.zones),
-    racks: array<WarehouseLayoutRack>(source.racks),
+    racks: array(source.racks).map(normalizeRack),
     shelves: array(source.shelves),
-    aisles: array<WarehouseLayoutAisle>(source.aisles),
-    gates: array<WarehouseLayoutGate>(source.gates),
+    aisles: array(source.aisles).map(normalizeAisle),
+    gates: array(source.gates).map(normalizeGate),
     updatedAt:
       typeof source.updatedAt === "string" ? source.updatedAt : undefined,
   };
