@@ -5,6 +5,7 @@ import {
   calculatePinchZoom,
   getRackAccessPoint,
   getMapViewBox,
+  getRackNavigationAccessPoint,
   getRackRect,
   normalizeWarehouseLayout,
   panMapCenter,
@@ -331,5 +332,47 @@ describe("warehouse layout normalization", () => {
     expect(points[0]).toEqual({ xM: 2, yM: 6 });
     expect(points.at(-1)).toEqual({ xM: 10, yM: 3 });
     expect(routeIntersectsRack(points, blockingRack)).toBe(false);
+  });
+
+  it("replaces an access point inside the rack with the center of its nearest aisle", () => {
+    const rack = {
+      id: "rack-02",
+      code: "RACK-02",
+      xM: 20,
+      yM: 14,
+      widthM: 7,
+      depthM: 1.8,
+      accessPoint: { xM: 23.5, yM: 14.9 },
+    };
+    const aisles = [
+      { id: "aisle-06", code: "AISLE-06", type: "RACK" as const, xM: 19, yM: 16, widthM: 10, heightM: 2 },
+    ];
+
+    expect(getRackNavigationAccessPoint(rack, aisles, { xM: 18, yM: 23 })).toEqual({
+      xM: 23.5,
+      yM: 17,
+    });
+  });
+
+  it("keeps the complete route outside the target rack", () => {
+    const rack = {
+      id: "rack-02",
+      code: "RACK-02",
+      xM: 20,
+      yM: 14,
+      widthM: 7,
+      depthM: 1.8,
+      accessPoint: { xM: 23.5, yM: 14.9 },
+    };
+    const points = buildSafeWarehouseRoutePoints(
+      { xM: 18, yM: 23 },
+      rack,
+      [{ id: "aisle-06", code: "AISLE-06", type: "RACK", xM: 17, yM: 16, widthM: 12, heightM: 2 }],
+      [rack],
+      { widthM: 36, heightM: 24, gridM: 1 },
+    );
+
+    expect(points.at(-1)).toEqual({ xM: 23.5, yM: 17 });
+    expect(routeIntersectsRack(points, rack)).toBe(false);
   });
 });

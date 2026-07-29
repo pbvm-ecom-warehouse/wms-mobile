@@ -5,7 +5,7 @@ import { Maximize2, Minus, Navigation, Plus, X } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
 import { fetchWarehouseLayout, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
 import type { NavigationPath } from '../types/putaway';
-import { buildSafeWarehouseRoutePoints, calculatePinchZoom, calculateRouteDistance, clampMapZoom, getMapViewBox, getRackRect, isFiniteLayoutPoint, panMapCenter, type LayoutPoint } from '../utils/warehouse-layout';
+import { buildSafeWarehouseRoutePoints, calculatePinchZoom, calculateRouteDistance, clampMapZoom, getMapViewBox, getRackRect, panMapCenter, type LayoutPoint } from '../utils/warehouse-layout';
 import { RackCellViewerModal } from './rack-cell-viewer-modal';
 
 export interface WarehouseRouteMapModalProps {
@@ -280,15 +280,13 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
   const canvas = layout.canvas;
   const gates = layout.gates.length > 0 ? layout.gates : [defaultGate];
   const startGate = gates.find((gate) => gate.code === path?.startGateCode) ?? gates[0];
-  const selectedPathMatches = selectedRack ? path?.targetRackId === selectedRack.id || path?.targetRackId === selectedRack.code : false;
-  const apiPoints = selectedPathMatches && path?.points?.length && path.points.every(isFiniteLayoutPoint) ? path.points : null;
   const points = useMemo(
-    () => apiPoints ?? (selectedRack ? buildSafeWarehouseRoutePoints(startGate, selectedRack, layout.aisles, racks, canvas) : []),
-    [apiPoints, canvas, layout.aisles, racks, selectedRack, startGate],
+    () => selectedRack ? buildSafeWarehouseRoutePoints(startGate, selectedRack, layout.aisles, racks, canvas) : [],
+    [canvas, layout.aisles, racks, selectedRack, startGate],
   );
 
   const routePolylinePoints = points.map((p) => `${p.xM},${p.yM}`).join(' ');
-  const distance = selectedPathMatches && path?.distanceM ? path.distanceM : calculateRouteDistance(points);
+  const distance = calculateRouteDistance(points);
   const gateCode = path?.startGateCode ?? startGate.code;
   const currentRackCode = selectedRack?.code || 'RACK-02';
   const routeCenter = useMemo(
