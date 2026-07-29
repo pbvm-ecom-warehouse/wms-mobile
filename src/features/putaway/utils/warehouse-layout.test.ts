@@ -1,5 +1,6 @@
 import {
   buildAisleRoutePoints,
+  buildSafeWarehouseRoutePoints,
   buildRackRoutePoints,
   calculatePinchZoom,
   getRackAccessPoint,
@@ -7,6 +8,7 @@ import {
   getRackRect,
   normalizeWarehouseLayout,
   panMapCenter,
+  routeIntersectsRack,
 } from "./warehouse-layout";
 
 describe("warehouse layout normalization", () => {
@@ -297,5 +299,37 @@ describe("warehouse layout normalization", () => {
       { xM: 5, yM: 3 },
       { xM: 14, yM: 3 },
     ]);
+  });
+
+  it("finds a local detour when aisle segments are disconnected instead of crossing a rack", () => {
+    const blockingRack = {
+      id: "rack-blocker",
+      code: "RACK-BLOCKER",
+      xM: 4,
+      yM: 3,
+      widthM: 4,
+      depthM: 2,
+    };
+    const targetRack = {
+      id: "rack-target",
+      code: "RACK-TARGET",
+      xM: 9,
+      yM: 1,
+      widthM: 2,
+      depthM: 2,
+      accessPoint: { xM: 10, yM: 3 },
+    };
+
+    const points = buildSafeWarehouseRoutePoints(
+      { xM: 2, yM: 6 },
+      targetRack,
+      [],
+      [blockingRack, targetRack],
+      { widthM: 12, heightM: 8, gridM: 1 },
+    );
+
+    expect(points[0]).toEqual({ xM: 2, yM: 6 });
+    expect(points.at(-1)).toEqual({ xM: 10, yM: 3 });
+    expect(routeIntersectsRack(points, blockingRack)).toBe(false);
   });
 });

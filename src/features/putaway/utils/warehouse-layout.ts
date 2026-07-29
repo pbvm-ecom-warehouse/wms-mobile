@@ -355,6 +355,129 @@ export function buildAisleRoutePoints(
   return simplifyRoute([gate, ...aislePath, accessPoint]);
 }
 
+function segmentIntersectsRect(
+  start: LayoutPoint,
+  end: LayoutPoint,
+  rect: LayoutRect,
+  margin = 0.12,
+): boolean {
+  const left = rect.xM - margin;
+  const right = rect.xM + rect.widthM + margin;
+  const top = rect.yM - margin;
+  const bottom = rect.yM + rect.heightM + margin;
+  if (start.xM === end.xM) {
+    return start.xM > left && start.xM < right &&
+      Math.max(start.yM, end.yM) > top && Math.min(start.yM, end.yM) < bottom;
+  }
+  if (start.yM === end.yM) {
+    return start.yM > top && start.yM < bottom &&
+      Math.max(start.xM, end.xM) > left && Math.min(start.xM, end.xM) < right;
+  }
+  return false;
+}
+
+export function routeIntersectsRack(
+  points: LayoutPoint[],
+  rack: WarehouseLayoutRack,
+): boolean {
+  const rect = getRackRect(rack);
+  return points.some(
+    (point, index) =>
+      index > 0 && segmentIntersectsRect(points[index - 1], point, rect),
+  );
+}
+
+export function buildSafeWarehouseRoutePoints(
+  gate: LayoutPoint,
+  targetRack: WarehouseLayoutRack,
+  aisles: WarehouseLayoutAisle[],
+  racks: WarehouseLayoutRack[],
+  canvas: WarehouseLayoutCanvas,
+): LayoutPoint[] {
+  const accessPoint = getRackAccessPoint(targetRack, gate);
+  const blockers = racks.filter((rack) => rack.id !== targetRack.id && rack.code !== targetRack.code);
+  const aisleRoute = buildAisleRoutePoints(gate, targetRack, aisles);
+  if (!blockers.some((rack) => routeIntersectsRack(aisleRoute, rack))) {
+    return aisleRoute;
+  }
+
+  const step = Math.max(0.25, Math.min(0.5, canvas.gridM || 0.5));
+  const columns = Math.floor(canvas.widthM / step) + 1;
+  const rows = Math.floor(canvas.heightM / step) + 1;
+  const toCell = (point: LayoutPoint) => ({
+    x: clamp(Math.round(point.xM / step), 0, columns - 1),
+    y: clamp(Math.round(point.yM / step), 0, rows - 1),
+  });
+  const toPoint = (x: number, y: number): LayoutPoint => ({
+    xM: roundLayout(x * step),
+    yM: roundLayout(y * step),
+  });
+  const key = (x: number, y: number) => y * columns + x;
+  const start = toCell(gate);
+  const target = toCell(accessPoint);
+  const targetKey = key(target.x, target.y);
+  const startKey = key(start.x, start.y);
+  const blocked = (point: LayoutPoint) =>
+    blockers.some((rack) => {
+      const rect = getRackRect(rack);
+      return point.xM > rect.xM - 0.12 &&
+        point.xM < rect.xM + rect.widthM + 0.12 &&
+        point.yM > rect.yM - 0.12 &&
+        point.yM < rect.yM + rect.heightM + 0.12;
+    });
+  const inAisle = (point: LayoutPoint) =>
+    aisles.some(
+      (aisle) =>
+        point.xM >= aisle.xM &&
+        point.xM <= aisle.xM + aisle.widthM &&
+        point.yM >= aisle.yM &&
+        point.yM <= aisle.yM + aisle.heightM,
+    );
+
+  const distance = new Map<number, number>([[startKey, 0]]);
+  const score = new Map<number, number>([
+    [startKey, Math.abs(start.x - target.x) + Math.abs(start.y - target.y)],
+  ]);
+  const previous = new Map<number, number>();
+  const open = new Set<number>([startKey]);
+  const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+
+  while (open.size > 0) {
+    let current = -1;
+    open.forEach((candidate) => {
+      if (current < 0 || (score.get(candidate) ?? Infinity) < (score.get(current) ?? Infinity)) {
+        current = candidate;
+      }
+    });
+    if (current === targetKey) break;
+    open.delete(current);
+    const currentX = current % columns;
+    const currentY = Math.floor(current / columns);
+    for (const [dx, dy] of directions) {
+      const nextX = currentX + dx;
+      const nextY = currentY + dy;
+      if (nextX < 0 || nextX >= columns || nextY < 0 || nextY >= rows) continue;
+      const nextPoint = toPoint(nextX, nextY);
+      const nextKey = key(nextX, nextY);
+      if (nextKey !== targetKey && blocked(nextPoint)) continue;
+      const nextDistance = (distance.get(current) ?? Infinity) + (inAisle(nextPoint) ? 1 : 4);
+      if (nextDistance >= (distance.get(nextKey) ?? Infinity)) continue;
+      previous.set(nextKey, current);
+      distance.set(nextKey, nextDistance);
+      score.set(nextKey, nextDistance + Math.abs(nextX - target.x) + Math.abs(nextY - target.y));
+      open.add(nextKey);
+    }
+  }
+
+  if (!distance.has(targetKey)) return aisleRoute;
+  const gridPath: LayoutPoint[] = [];
+  for (let current = targetKey; ; current = previous.get(current)!) {
+    gridPath.unshift(toPoint(current % columns, Math.floor(current / columns)));
+    if (current === startKey) break;
+  }
+  return simplifyRoute([gate, ...gridPath, accessPoint]);
+}
+
 export function calculateRouteDistance(points: LayoutPoint[]): number {
   return points.reduce((total, point, index) => {
     if (index === 0) return total;
