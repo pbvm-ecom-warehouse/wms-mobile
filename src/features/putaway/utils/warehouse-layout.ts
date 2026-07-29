@@ -241,6 +241,41 @@ function aislePoint(
       };
 }
 
+export function getRackNavigationAccessPoint(
+  rack: WarehouseLayoutRack,
+  aisles: WarehouseLayoutAisle[],
+  fromPoint?: LayoutPoint,
+): LayoutPoint {
+  if (aisles.length === 0) return getRackAccessPoint(rack, fromPoint);
+  const rackRect = getRackRect(rack);
+  const rackCenter = {
+    xM: rackRect.xM + rackRect.widthM / 2,
+    yM: rackRect.yM + rackRect.heightM / 2,
+  };
+  const candidates = aisles.map((aisle) => {
+    const deltaX = Math.max(
+      aisle.xM - (rackRect.xM + rackRect.widthM),
+      rackRect.xM - (aisle.xM + aisle.widthM),
+      0,
+    );
+    const deltaY = Math.max(
+      aisle.yM - (rackRect.yM + rackRect.heightM),
+      rackRect.yM - (aisle.yM + aisle.heightM),
+      0,
+    );
+    return {
+      point: aislePoint(aisle, rackCenter),
+      distance: Math.hypot(deltaX, deltaY),
+      priority: aisle.type === "RACK" ? 0 : 1,
+    };
+  });
+  candidates.sort(
+    (left, right) =>
+      left.distance - right.distance || left.priority - right.priority,
+  );
+  return candidates[0].point;
+}
+
 function aisleIntersection(
   left: WarehouseLayoutAisle,
   right: WarehouseLayoutAisle,
@@ -285,7 +320,7 @@ export function buildAisleRoutePoints(
   rack: WarehouseLayoutRack,
   aisles: WarehouseLayoutAisle[],
 ): LayoutPoint[] {
-  const accessPoint = getRackAccessPoint(rack, gate);
+  const accessPoint = getRackNavigationAccessPoint(rack, aisles, gate);
   if (aisles.length === 0) return buildRackRoutePoints(gate, rack);
 
   const distanceToAisle = (point: LayoutPoint, aisle: WarehouseLayoutAisle) => {
@@ -394,8 +429,8 @@ export function buildSafeWarehouseRoutePoints(
   racks: WarehouseLayoutRack[],
   canvas: WarehouseLayoutCanvas,
 ): LayoutPoint[] {
-  const accessPoint = getRackAccessPoint(targetRack, gate);
-  const blockers = racks.filter((rack) => rack.id !== targetRack.id && rack.code !== targetRack.code);
+  const accessPoint = getRackNavigationAccessPoint(targetRack, aisles, gate);
+  const blockers = racks;
   const aisleRoute = buildAisleRoutePoints(gate, targetRack, aisles);
   if (!blockers.some((rack) => routeIntersectsRack(aisleRoute, rack))) {
     return aisleRoute;
@@ -425,14 +460,25 @@ export function buildSafeWarehouseRoutePoints(
         point.yM > rect.yM - 0.12 &&
         point.yM < rect.yM + rect.heightM + 0.12;
     });
-  const inAisle = (point: LayoutPoint) =>
-    aisles.some(
-      (aisle) =>
-        point.xM >= aisle.xM &&
-        point.xM <= aisle.xM + aisle.widthM &&
-        point.yM >= aisle.yM &&
-        point.yM <= aisle.yM + aisle.heightM,
-    );
+  const aisleTraversalCost = (point: LayoutPoint) => {
+    const costs = aisles
+      .filter(
+        (aisle) =>
+          point.xM >= aisle.xM &&
+          point.xM <= aisle.xM + aisle.widthM &&
+          point.yM >= aisle.yM &&
+          point.yM <= aisle.yM + aisle.heightM,
+      )
+      .map((aisle) => {
+        const horizontal = aisle.widthM >= aisle.heightM;
+        const distanceFromCenter = horizontal
+          ? Math.abs(point.yM - (aisle.yM + aisle.heightM / 2))
+          : Math.abs(point.xM - (aisle.xM + aisle.widthM / 2));
+        const halfWidth = Math.max(step, (horizontal ? aisle.heightM : aisle.widthM) / 2);
+        return 1 + (distanceFromCenter / halfWidth) * 4;
+      });
+    return costs.length > 0 ? Math.min(...costs) : 12;
+  };
 
   const distance = new Map<number, number>([[startKey, 0]]);
   const score = new Map<number, number>([
@@ -460,7 +506,7 @@ export function buildSafeWarehouseRoutePoints(
       const nextPoint = toPoint(nextX, nextY);
       const nextKey = key(nextX, nextY);
       if (nextKey !== targetKey && blocked(nextPoint)) continue;
-      const nextDistance = (distance.get(current) ?? Infinity) + (inAisle(nextPoint) ? 1 : 4);
+      const nextDistance = (distance.get(current) ?? Infinity) + aisleTraversalCost(nextPoint);
       if (nextDistance >= (distance.get(nextKey) ?? Infinity)) continue;
       previous.set(nextKey, current);
       distance.set(nextKey, nextDistance);
