@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   Platform,
@@ -29,7 +28,7 @@ import {
 } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
 import { formatApiError } from '@/shared/lib/api-client';
-import { AppButton, StatusBadge } from '@/shared/ui';
+import { AppAlertModal, AppAlertModalProps, AppButton, StatusBadge } from '@/shared/ui';
 import { createGoodsReceiptNote, listPurchaseOrdersForReceiving } from '../api/grn-api';
 import type { GoodsReceiptNote, PurchaseOrderSummary } from '../types/grn';
 import {
@@ -70,6 +69,17 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
   const [draftItems, setDraftItems] = useState<DraftItemState[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Custom App UI Alert/Confirm state
+  const [alertState, setAlertState] = useState<AppAlertModalProps | null>(null);
+
+  const showAlert = (config: Omit<AppAlertModalProps, 'visible'>) => {
+    setAlertState({
+      ...config,
+      visible: true,
+      onClose: () => setAlertState(null),
+    });
+  };
   const [activeDatePickerIndex, setActiveDatePickerIndex] = useState<{
     index: number;
     field: 'manufacturedDate' | 'expiryDate';
@@ -88,10 +98,11 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Cần cấp quyền',
-          'Ứng dụng cần quyền truy cập máy ảnh để chụp ảnh minh chứng.',
-        );
+        showAlert({
+          title: 'Cần cấp quyền',
+          message: 'Ứng dụng cần quyền truy cập máy ảnh để chụp ảnh minh chứng.',
+          variant: 'warning',
+        });
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -103,7 +114,7 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
         setEvidenceImages((prev) => [...prev, result.assets[0].uri]);
       }
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể mở máy ảnh');
+      showAlert({ title: 'Lỗi', message: err?.message || 'Không thể mở máy ảnh', variant: 'danger' });
     }
   };
 
@@ -111,10 +122,11 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Cần cấp quyền',
-          'Ứng dụng cần quyền truy cập thư viện ảnh.',
-        );
+        showAlert({
+          title: 'Cần cấp quyền',
+          message: 'Ứng dụng cần quyền truy cập thư viện ảnh.',
+          variant: 'warning',
+        });
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -128,7 +140,7 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
         setEvidenceImages((prev) => [...prev, ...uris]);
       }
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể mở thư viện ảnh');
+      showAlert({ title: 'Lỗi', message: err?.message || 'Không thể mở thư viện ảnh', variant: 'danger' });
     }
   };
 
@@ -220,7 +232,11 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
 
     const activeItems = draftItems.filter((i) => i.selected);
     if (activeItems.length === 0) {
-      Alert.alert('Cảnh báo', 'Vui lòng chọn ít nhất 1 mặt hàng thực nhận để tạo phiếu nhập kho.');
+      showAlert({
+        title: 'Cảnh báo',
+        message: 'Vui lòng chọn ít nhất 1 mặt hàng thực nhận để tạo phiếu nhập kho.',
+        variant: 'warning',
+      });
       return;
     }
 
@@ -229,32 +245,56 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
     for (const item of activeItems) {
       const qtyNum = Number(item.actualQty);
       if (isNaN(qtyNum) || qtyNum <= 0 || !Number.isInteger(qtyNum)) {
-        Alert.alert('Số lượng không hợp lệ', `Số thùng/mặt hàng thực nhận cho SKU "${item.sku}" phải là số nguyên lớn hơn 0.`);
+        showAlert({
+          title: 'Số lượng không hợp lệ',
+          message: `Số thùng/mặt hàng thực nhận cho SKU "${item.sku}" phải là số nguyên lớn hơn 0.`,
+          variant: 'warning',
+        });
         return;
       }
 
       if (!item.manufacturedDate || !isCalendarDate(item.manufacturedDate)) {
-        Alert.alert('Ngày sản xuất không hợp lệ', `Mặt hàng "${item.itemName || item.sku}" cần có ngày sản xuất đúng định dạng (YYYY-MM-DD).`);
+        showAlert({
+          title: 'Ngày sản xuất không hợp lệ',
+          message: `Mặt hàng "${item.itemName || item.sku}" cần có ngày sản xuất đúng định dạng (YYYY-MM-DD).`,
+          variant: 'warning',
+        });
         return;
       }
 
       if (item.manufacturedDate > today) {
-        Alert.alert('Ngày sản xuất không hợp lệ', `Ngày sản xuất cho "${item.itemName || item.sku}" không được sau ngày hiện tại.`);
+        showAlert({
+          title: 'Ngày sản xuất không hợp lệ',
+          message: `Ngày sản xuất cho "${item.itemName || item.sku}" không được sau ngày hiện tại.`,
+          variant: 'warning',
+        });
         return;
       }
 
       if (item.isPerishable && !item.expiryDate) {
-        Alert.alert('Thiếu hạn sử dụng', `Mặt hàng "${item.itemName || item.sku}" có hạn sử dụng — cần nhập hạn sử dụng.`);
+        showAlert({
+          title: 'Thiếu hạn sử dụng',
+          message: `Mặt hàng "${item.itemName || item.sku}" có hạn sử dụng — cần nhập hạn sử dụng.`,
+          variant: 'warning',
+        });
         return;
       }
 
       if (item.expiryDate && !isCalendarDate(item.expiryDate)) {
-        Alert.alert('Hạn sử dụng không hợp lệ', `Hạn sử dụng cho "${item.itemName || item.sku}" không đúng định dạng YYYY-MM-DD.`);
+        showAlert({
+          title: 'Hạn sử dụng không hợp lệ',
+          message: `Hạn sử dụng cho "${item.itemName || item.sku}" không đúng định dạng YYYY-MM-DD.`,
+          variant: 'warning',
+        });
         return;
       }
 
       if (item.expiryDate && item.manufacturedDate && item.expiryDate <= item.manufacturedDate) {
-        Alert.alert('Hạn sử dụng không hợp lệ', `Hạn sử dụng cho "${item.itemName || item.sku}" phải sau ngày sản xuất.`);
+        showAlert({
+          title: 'Hạn sử dụng không hợp lệ',
+          message: `Hạn sử dụng cho "${item.itemName || item.sku}" phải sau ngày sản xuất.`,
+          variant: 'warning',
+        });
         return;
       }
     }
@@ -264,7 +304,11 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
       if (item.lotNumber) {
         const key = `${item.itemId}:${item.lotNumber}`;
         if (seenLots.has(key)) {
-          Alert.alert('Trùng số lô', `Mặt hàng "${item.itemName || item.sku}" bị trùng số lô (${item.lotNumber}) trong cùng phiếu nhập.`);
+          showAlert({
+            title: 'Trùng số lô',
+            message: `Mặt hàng "${item.itemName || item.sku}" bị trùng số lô (${item.lotNumber}) trong cùng phiếu nhập.`,
+            variant: 'warning',
+          });
           return;
         }
         seenLots.add(key);
@@ -272,10 +316,11 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
     }
 
     if (evidenceImages.length === 0) {
-      Alert.alert(
-        'Bắt buộc có ảnh minh chứng',
-        'Hệ thống yêu cầu bắt buộc chụp hoặc chọn ít nhất 1 ảnh minh chứng khi tạo phiếu nhập kho.',
-      );
+      showAlert({
+        title: 'Bắt buộc có ảnh minh chứng',
+        message: 'Hệ thống yêu cầu bắt buộc chụp hoặc chọn ít nhất 1 ảnh minh chứng khi tạo phiếu nhập kho.',
+        variant: 'warning',
+      });
       return;
     }
 
@@ -295,14 +340,18 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
         images: evidenceImages,
       });
 
-      Alert.alert(
-        'Thành công',
-        `Đã tạo phiếu nhập kho ${grn.grnNumber || grn.id} thành công!${
+      showAlert({
+        title: 'Thành công',
+        message: `Đã tạo phiếu nhập kho ${grn.grnNumber || grn.id} thành công!${
           evidenceImages.length > 0 ? ` (kèm ${evidenceImages.length} ảnh minh chứng)` : ''
         }`,
-      );
-      onSuccess(grn);
-      onClose();
+        variant: 'success',
+        onConfirm: () => {
+          setAlertState(null);
+          onSuccess(grn);
+          onClose();
+        },
+      });
     } catch (err: any) {
       setErrorMsg(formatApiError(err));
     } finally {
@@ -709,6 +758,9 @@ export function CreateGrnModal({ visible, onClose, onSuccess }: CreateGrnModalPr
         onSelect={handleSelectDate}
         onClose={() => setActiveDatePickerIndex(null)}
       />
+
+      {/* Custom Stock Mate App UI Alert / Confirm Modal */}
+      <AppAlertModal {...(alertState || { title: '' })} visible={Boolean(alertState?.visible)} />
     </Modal>
   );
 }

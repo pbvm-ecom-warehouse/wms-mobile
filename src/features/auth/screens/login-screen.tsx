@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import axios from 'axios';
 import { AlertCircle, LockKeyhole, Package, UserRound } from 'lucide-react-native';
 import { useAuth } from '@/features/auth/context/auth-context';
@@ -51,7 +51,6 @@ export function LoginScreen() {
     if (!username.trim() || !password) {
       const emptyMsg = 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.';
       setError(emptyMsg);
-      Alert.alert('Thông báo', emptyMsg);
       return;
     }
     setError(null);
@@ -60,7 +59,6 @@ export function LoginScreen() {
     } catch (loginError) {
       const errMsg = getLoginError(loginError);
       setError(errMsg);
-      Alert.alert('Đăng nhập thất bại', errMsg);
     }
   }
 

@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, PanResponder, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Defs, G, Path, Pattern, Polyline, Rect, Text as SvgText } from 'react-native-svg';
-import { Maximize2, Minus, Navigation, Plus, X } from 'lucide-react-native';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Maximize2, Minus, Navigation, Plus, X } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
-import { fetchWarehouseLayout, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
+import { fetchWarehouseLayout, getNavigationPath, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
 import type { NavigationPath } from '../types/putaway';
 import { buildSafeWarehouseRoutePoints, calculatePinchZoom, calculateRouteDistance, clampMapZoom, getMapViewBox, getRackRect, panMapCenter, type LayoutPoint } from '../utils/warehouse-layout';
 import { RackCellViewerModal } from './rack-cell-viewer-modal';
@@ -232,6 +232,120 @@ const fallbackLayout: WarehouseLayout = {
   gates: [defaultGate],
 };
 
+interface WarehouseMapSvgContentProps {
+  svgRef: React.RefObject<React.ElementRef<typeof Svg>>;
+  canvas: WarehouseLayout['canvas'];
+  layout: WarehouseLayout;
+  racks: WarehouseLayoutRack[];
+  gates: WarehouseLayoutGate[];
+  points: { xM: number; yM: number }[];
+  routePolylinePoints: string;
+  currentRackCode: string;
+  onRackPress: (rack: WarehouseLayoutRack) => void;
+}
+
+const WarehouseMapSvgContent = memo(function WarehouseMapSvgContent({
+  svgRef,
+  canvas,
+  layout,
+  racks,
+  gates,
+  points,
+  routePolylinePoints,
+  currentRackCode,
+  onRackPress,
+}: WarehouseMapSvgContentProps) {
+  return (
+    <Svg ref={svgRef} width="100%" height="390" preserveAspectRatio="xMidYMid meet">
+      <Defs>
+        <Pattern id="operation-grid-mobile" width={canvas.gridM} height={canvas.gridM} patternUnits="userSpaceOnUse">
+          <Path d={`M ${canvas.gridM} 0 L 0 0 0 ${canvas.gridM}`} fill="none" stroke="#cbd5e1" strokeWidth="0.025" />
+        </Pattern>
+      </Defs>
+      {/* Outer Border */}
+      <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="#ffffff" stroke="#334155" strokeWidth="0.18" />
+      <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="url(#operation-grid-mobile)" />
+
+      {/* Zones */}
+      {layout.zones.map((zone) => (
+        <Rect
+          key={zone.id}
+          x={zone.xM}
+          y={zone.yM}
+          width={zone.rotation === 90 ? zone.heightM : zone.widthM}
+          height={zone.rotation === 90 ? zone.widthM : zone.heightM}
+          fill="#f8fafc"
+          stroke="#94a3b8"
+          strokeDasharray="0.3 0.22"
+          strokeWidth="0.06"
+        />
+      ))}
+
+      {/* Aisles Corridors */}
+      {layout.aisles.map((aisle) => (
+        <G key={aisle.code}>
+          <Rect x={aisle.xM} y={aisle.yM} width={aisle.widthM} height={aisle.heightM} fill={aisle.type === 'MAIN' ? '#dbe4e7' : '#eef2f3'} stroke="#cbd5e1" strokeWidth="0.04" />
+          <SvgText x={aisle.xM + aisle.widthM / 2} y={aisle.yM + aisle.heightM / 2 + 0.15} fontSize="0.45" fontWeight="bold" fill="#64748b" textAnchor="middle">
+            {aisle.code}
+          </SvgText>
+        </G>
+      ))}
+
+      {/* Racks */}
+      {racks.map((rack) => {
+        const isTarget = currentRackCode === rack.code;
+        const rect = getRackRect(rack);
+        return (
+          <G key={rack.id || rack.code}>
+            <Rect
+              x={rect.xM}
+              y={rect.yM}
+              width={rect.widthM}
+              height={rect.heightM}
+              rx="0.2"
+              fill={isTarget ? '#f59e0b' : '#cbd5e1'}
+              stroke={isTarget ? '#b45309' : '#475569'}
+              strokeWidth={isTarget ? '0.3' : '0.1'}
+              onPress={() => onRackPress(rack)}
+            />
+            <SvgText x={rect.xM + rect.widthM / 2} y={rect.yM + rect.heightM / 2 + 0.25} fontSize="0.55" fontWeight="bold" fill={isTarget ? '#78350f' : '#1e293b'} textAnchor="middle" onPress={() => onRackPress(rack)}>
+              {rack.code}
+            </SvgText>
+          </G>
+        );
+      })}
+
+      {/* Route Polyline Path */}
+      {routePolylinePoints ? (
+        <>
+          <Polyline points={routePolylinePoints} fill="none" stroke="#2563eb" strokeWidth="0.45" strokeDasharray="0.6 0.3" strokeLinecap="round" strokeLinejoin="round" />
+          {points.map((pt, idx) => (
+            <Circle
+              key={idx}
+              cx={pt.xM}
+              cy={pt.yM}
+              r={idx === 0 || idx === points.length - 1 ? '0.5' : '0.25'}
+              fill={idx === 0 ? '#0f766e' : idx === points.length - 1 ? '#d97706' : '#2563eb'}
+              stroke="#ffffff"
+              strokeWidth="0.1"
+            />
+          ))}
+        </>
+      ) : null}
+
+      {/* Gate Markers */}
+      {gates.map((gate) => (
+        <G key={gate.id}>
+          <Circle cx={gate.xM} cy={gate.yM} r="0.55" fill="#0f766e" stroke="#ffffff" strokeWidth="0.1" />
+          <SvgText x={gate.xM} y={gate.yM - 0.8} fontSize="0.5" fontWeight="bold" fill="#0f766e" textAnchor="middle">
+            {gate.code}
+          </SvgText>
+        </G>
+      ))}
+    </Svg>
+  );
+});
+
 export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation = 'RACK-02-T1-B1', readOnly = false, onSelectLocation, onConfirmScanCell }: WarehouseRouteMapModalProps) {
   const [selectedRack, setSelectedRack] = useState<WarehouseLayoutRack | null>(null);
   const [layout, setLayout] = useState<WarehouseLayout>(fallbackLayout);
@@ -276,18 +390,60 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
     }
   }, [visible, targetLocation]);
 
+  const [fetchedPath, setFetchedPath] = useState<NavigationPath | null>(null);
+
+  useEffect(() => {
+    if (visible && selectedRack?.id) {
+      if (path && (path.targetRackId === selectedRack.id || path.targetRackId === selectedRack.code)) {
+        setFetchedPath(null);
+        return;
+      }
+      getNavigationPath(selectedRack.id)
+        .then((navPath) => {
+          if (navPath) {
+            setFetchedPath(navPath);
+          } else {
+            setFetchedPath(null);
+          }
+        })
+        .catch(() => {
+          setFetchedPath(null);
+        });
+    } else {
+      setFetchedPath(null);
+    }
+  }, [visible, selectedRack?.id, selectedRack?.code, path]);
+
+  const activePath = fetchedPath || path;
+
   const racks = layout.racks;
   const canvas = layout.canvas;
   const gates = layout.gates.length > 0 ? layout.gates : [defaultGate];
-  const startGate = gates.find((gate) => gate.code === path?.startGateCode) ?? gates[0];
-  const points = useMemo(
+  const startGate = gates.find((gate) => gate.code === activePath?.startGateCode) ?? gates[0];
+
+  // Prefer API path.points when available (from suggestion or fetchedPath), fallback to local geometry
+  const apiPathPoints: LayoutPoint[] = useMemo(() => {
+    if (activePath?.points && activePath.points.length > 0) {
+      return activePath.points;
+    }
+    return [];
+  }, [activePath]);
+
+  const localPoints = useMemo(
     () => selectedRack ? buildSafeWarehouseRoutePoints(startGate, selectedRack, layout.aisles, racks, canvas) : [],
     [canvas, layout.aisles, racks, selectedRack, startGate],
   );
 
-  const routePolylinePoints = points.map((p) => `${p.xM},${p.yM}`).join(' ');
-  const distance = calculateRouteDistance(points);
-  const gateCode = path?.startGateCode ?? startGate.code;
+  // Use API points if available, otherwise fall back to locally computed
+  const points = apiPathPoints.length > 0 ? apiPathPoints : localPoints;
+
+  const routePolylinePoints = useMemo(() => points.map((p) => `${p.xM},${p.yM}`).join(' '), [points]);
+  // Prefer server-calculated distance; fallback to local geometry
+  const distance = useMemo(
+    () => activePath?.distanceM != null ? activePath.distanceM : calculateRouteDistance(points),
+    [activePath?.distanceM, points],
+  );
+  const gateCode = activePath?.startGateCode ?? startGate.code;
   const currentRackCode = selectedRack?.code || 'RACK-02';
   const routeCenter = useMemo(
     () =>
@@ -299,39 +455,22 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
         : { xM: canvas.widthM / 2, yM: canvas.heightM / 2 },
     [canvas.heightM, canvas.widthM, points],
   );
-  const mapViewBox = getMapViewBox(canvas, zoomLevel, mapCenter);
-  const viewBox = `${mapViewBox.xM} ${mapViewBox.yM} ${mapViewBox.widthM} ${mapViewBox.heightM}`;
 
   useEffect(() => {
     if (visible) {
-      mapCenterRef.current = routeCenter;
+      const center = routeCenter;
+      mapCenterRef.current = center;
       zoomRef.current = 1;
-      setMapCenter(routeCenter);
+      setMapCenter(center);
       setZoomLevel(1);
+      // Apply viewBox immediately via native props so Svg shows correct view
+      // without waiting for the React state → render → prop cycle
+      requestAnimationFrame(() => {
+        applyNativeViewport(center, 1);
+      });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, selectedRack?.id, selectedRack?.code, routeCenter]);
-
-  const handleRackPress = (rack: WarehouseLayoutRack) => {
-    setSelectedRack(rack);
-  };
-
-  const handleOpenRackViewer = () => {
-    setRackViewerOpen(true);
-  };
-
-  const handleZoom = (delta: number) => {
-    const nextZoom = clampMapZoom(Number((zoomRef.current + delta).toFixed(2)));
-    zoomRef.current = nextZoom;
-    setZoomLevel(nextZoom);
-  };
-  const handleZoomIn = () => handleZoom(0.25);
-  const handleZoomOut = () => handleZoom(-0.25);
-  const handleResetZoom = () => {
-    zoomRef.current = 1;
-    mapCenterRef.current = routeCenter;
-    setZoomLevel(1);
-    setMapCenter(routeCenter);
-  };
 
   const applyNativeViewport = (center: LayoutPoint, zoom: number) => {
     const nextViewBox = getMapViewBox(canvasRef.current, zoom, center);
@@ -348,6 +487,43 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
     });
   };
 
+  const handleRackPress = (rack: WarehouseLayoutRack) => {
+    setSelectedRack(rack);
+  };
+
+  const handleOpenRackViewer = () => {
+    setRackViewerOpen(true);
+  };
+
+  const handleZoom = (delta: number) => {
+    const nextZoom = clampMapZoom(Number((zoomRef.current + delta).toFixed(2)));
+    zoomRef.current = nextZoom;
+    setZoomLevel(nextZoom);
+    applyNativeViewport(mapCenterRef.current, nextZoom);
+  };
+  const handleZoomIn = () => handleZoom(0.25);
+  const handleZoomOut = () => handleZoom(-0.25);
+  const handleResetZoom = () => {
+    zoomRef.current = 1;
+    mapCenterRef.current = routeCenter;
+    setZoomLevel(1);
+    setMapCenter(routeCenter);
+    applyNativeViewport(routeCenter, 1);
+  };
+
+  const handlePanStep = (dxPx: number, dyPx: number) => {
+    const nextCenter = panMapCenter(
+      mapCenterRef.current,
+      canvasRef.current,
+      zoomRef.current,
+      mapSizeRef.current,
+      { dxPx, dyPx },
+    );
+    mapCenterRef.current = nextCenter;
+    setMapCenter(nextCenter);
+    applyNativeViewport(nextCenter, zoomRef.current);
+  };
+
   const mapPanResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: (event) => event.nativeEvent.touches.length >= 2,
@@ -361,7 +537,7 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
             touches.length >= 2
               ? {
                   distance: Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY),
-                  zoom: zoomLevel,
+                  zoom: zoomRef.current,
                 }
               : null;
         },
@@ -447,7 +623,7 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                 }}
                 {...mapPanResponder.panHandlers}
               >
-                <View className="absolute right-2 top-2 z-10 flex-row bg-white/95 rounded-xl border border-[#cbd5e1] overflow-hidden">
+                <View className="absolute right-2 top-2 z-20 flex-row bg-white/95 rounded-xl border border-[#cbd5e1] overflow-hidden shadow-sm">
                   <TouchableOpacity onPress={handleZoomOut} className="p-2 border-r border-[#e2e8f0]" accessibilityLabel="Thu nhỏ bản đồ">
                     <Minus size={15} color="#334155" />
                   </TouchableOpacity>
@@ -458,92 +634,58 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                     <Plus size={15} color="#334155" />
                   </TouchableOpacity>
                 </View>
-                <Svg ref={svgRef} width="100%" height="390" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
-                  <Defs>
-                    <Pattern id="operation-grid-mobile" width={canvas.gridM} height={canvas.gridM} patternUnits="userSpaceOnUse">
-                      <Path d={`M ${canvas.gridM} 0 L 0 0 0 ${canvas.gridM}`} fill="none" stroke="#cbd5e1" strokeWidth="0.025" />
-                    </Pattern>
-                  </Defs>
-                  {/* Outer Border */}
-                  <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="#ffffff" stroke="#334155" strokeWidth="0.18" />
-                  <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="url(#operation-grid-mobile)" />
 
-                  {layout.zones.map((zone) => (
-                  <Rect
-                    key={zone.id}
-                    x={zone.xM}
-                    y={zone.yM}
-                    width={zone.rotation === 90 ? zone.heightM : zone.widthM}
-                    height={zone.rotation === 90 ? zone.widthM : zone.heightM}
-                    fill="#f8fafc"
-                    stroke="#94a3b8"
-                    strokeDasharray="0.3 0.22"
-                    strokeWidth="0.06"
-                  />
-                ))}
+                {/* Directional Navigation Controls (Edge Overlay) */}
+                <View className="absolute top-2 left-0 right-0 items-center z-10" pointerEvents="box-none">
+                  <TouchableOpacity
+                    onPress={() => handlePanStep(0, 60)}
+                    className="w-8 h-8 rounded-full bg-white/95 border border-[#cbd5e1] items-center justify-center shadow-sm active:bg-slate-100"
+                    accessibilityLabel="Di chuyển lên"
+                  >
+                    <ChevronUp size={18} color="#334155" />
+                  </TouchableOpacity>
+                </View>
 
-                {/* Aisles Corridors */}
-                  {layout.aisles.map((aisle) => (
-                  <G key={aisle.code}>
-                    <Rect x={aisle.xM} y={aisle.yM} width={aisle.widthM} height={aisle.heightM} fill={aisle.type === 'MAIN' ? '#dbe4e7' : '#eef2f3'} stroke="#cbd5e1" strokeWidth="0.04" />
-                    <SvgText x={aisle.xM + aisle.widthM / 2} y={aisle.yM + aisle.heightM / 2 + 0.15} fontSize="0.45" fontWeight="bold" fill="#64748b" textAnchor="middle">
-                      {aisle.code}
-                    </SvgText>
-                  </G>
-                ))}
+                <View className="absolute bottom-2 left-0 right-0 items-center z-10" pointerEvents="box-none">
+                  <TouchableOpacity
+                    onPress={() => handlePanStep(0, -60)}
+                    className="w-8 h-8 rounded-full bg-white/95 border border-[#cbd5e1] items-center justify-center shadow-sm active:bg-slate-100"
+                    accessibilityLabel="Di chuyển xuống"
+                  >
+                    <ChevronDown size={18} color="#334155" />
+                  </TouchableOpacity>
+                </View>
 
-                {/* Racks */}
-                  {racks.map((rack) => {
-                  const isTarget = currentRackCode === rack.code;
-                  const rect = getRackRect(rack);
-                  return (
-                    <G key={rack.id || rack.code}>
-                      <Rect
-                        x={rect.xM}
-                        y={rect.yM}
-                        width={rect.widthM}
-                        height={rect.heightM}
-                        rx="0.2"
-                        fill={isTarget ? '#f59e0b' : '#cbd5e1'}
-                        stroke={isTarget ? '#b45309' : '#475569'}
-                        strokeWidth={isTarget ? '0.3' : '0.1'}
-                        onPress={() => handleRackPress(rack)}
-                      />
-                      <SvgText x={rect.xM + rect.widthM / 2} y={rect.yM + rect.heightM / 2 + 0.25} fontSize="0.55" fontWeight="bold" fill={isTarget ? '#78350f' : '#1e293b'} textAnchor="middle" onPress={() => handleRackPress(rack)}>
-                        {rack.code}
-                      </SvgText>
-                    </G>
-                  );
-                })}
+                <View className="absolute left-2 top-0 bottom-0 justify-center z-10" pointerEvents="box-none">
+                  <TouchableOpacity
+                    onPress={() => handlePanStep(60, 0)}
+                    className="w-8 h-8 rounded-full bg-white/95 border border-[#cbd5e1] items-center justify-center shadow-sm active:bg-slate-100"
+                    accessibilityLabel="Di chuyển sang trái"
+                  >
+                    <ChevronLeft size={18} color="#334155" />
+                  </TouchableOpacity>
+                </View>
 
-                {/* Route Polyline Path */}
-                  {routePolylinePoints ? (
-                  <>
-                    <Polyline points={routePolylinePoints} fill="none" stroke="#2563eb" strokeWidth="0.45" strokeDasharray="0.6 0.3" strokeLinecap="round" strokeLinejoin="round" />
-                    {points.map((pt, idx) => (
-                      <Circle
-                        key={idx}
-                        cx={pt.xM}
-                        cy={pt.yM}
-                        r={idx === 0 || idx === points.length - 1 ? '0.5' : '0.25'}
-                        fill={idx === 0 ? '#0f766e' : idx === points.length - 1 ? '#d97706' : '#2563eb'}
-                        stroke="#ffffff"
-                        strokeWidth="0.1"
-                      />
-                    ))}
-                  </>
-                ) : null}
-
-                {/* Gate Markers */}
-                  {gates.map((gate) => (
-                  <G key={gate.id}>
-                    <Circle cx={gate.xM} cy={gate.yM} r="0.55" fill="#0f766e" stroke="#ffffff" strokeWidth="0.1" />
-                    <SvgText x={gate.xM} y={gate.yM - 0.8} fontSize="0.5" fontWeight="bold" fill="#0f766e" textAnchor="middle">
-                      {gate.code}
-                    </SvgText>
-                  </G>
-                ))}
-                </Svg>
+                <View className="absolute right-2 top-0 bottom-0 justify-center z-10" pointerEvents="box-none">
+                  <TouchableOpacity
+                    onPress={() => handlePanStep(-60, 0)}
+                    className="w-8 h-8 rounded-full bg-white/95 border border-[#cbd5e1] items-center justify-center shadow-sm active:bg-slate-100"
+                    accessibilityLabel="Di chuyển sang phải"
+                  >
+                    <ChevronRight size={18} color="#334155" />
+                  </TouchableOpacity>
+                </View>
+                <WarehouseMapSvgContent
+                  svgRef={svgRef}
+                  canvas={canvas}
+                  layout={layout}
+                  racks={racks}
+                  gates={gates}
+                  points={points}
+                  routePolylinePoints={routePolylinePoints}
+                  currentRackCode={currentRackCode}
+                  onRackPress={handleRackPress}
+                />
               </View>
             )}
           </View>

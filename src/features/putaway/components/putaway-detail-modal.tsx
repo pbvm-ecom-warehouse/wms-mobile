@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ArrowLeft, Box, Calendar, CheckCircle2, Lightbulb, MapPin, Navigation, Package, RefreshCw, X } from 'lucide-react-native';
+import { ArrowLeft, AlertTriangle, Box, Calendar, CheckCircle2, Lightbulb, MapPin, Navigation, Package, RefreshCw, Route, X } from 'lucide-react-native';
 import type { GoodsReceiptNote } from '@/features/inbound/types/grn';
 import { useAuth } from '@/features/auth/context/auth-context';
 import { formatApiError } from '@/shared/lib/api-client';
@@ -86,10 +86,14 @@ export function PutawayDetailModal({
   const [scanConfirmVisible, setScanConfirmVisible] = useState(false);
   const [targetCellCode, setTargetCellCode] = useState('RACK-02-T1-B1');
 
-  // Suggestions State
+  // Suggestions state
   const [suggestions, setSuggestions] = useState<PutawayShelfSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [warningMsg, setWarningMsg] = useState<string | null>(null);
+
+  // Selected suggestion state (mirrors web's chosenCellId)
+  const [chosenCellId, setChosenCellId] = useState('');
 
   const resolveItemSku = (item: PutawayTaskItem, grnId?: string): string => {
     if (item.sku && item.sku.trim() && !item.sku.startsWith('SKU-')) return item.sku.trim();
@@ -157,7 +161,9 @@ export function PutawayDetailModal({
   const fetchSuggestions = async (item: PutawayTaskItem, resolvedSku: string, pkgCount: number) => {
     setLoadingSuggestions(true);
     setSuggestions([]);
+    setSuggestionsError(null);
     setWarningMsg(null);
+    setChosenCellId('');
     try {
       const res = await getPutawaySuggestions({
         sku: resolvedSku,
@@ -176,6 +182,7 @@ export function PutawayDetailModal({
       }
     } catch (err: any) {
       console.warn('Lỗi tải gợi ý vị trí:', err);
+      setSuggestionsError('Không lấy được gợi ý vị trí.');
       setTargetCellCode('RACK-02-T1-B1');
     } finally {
       setLoadingSuggestions(false);
@@ -281,56 +288,147 @@ export function PutawayDetailModal({
               </View>
 
               {/* Subsection: Vị trí đề xuất */}
-              <View className="flex-row justify-between items-center mb-2">
-                <Text className="text-xs font-bold text-[#475569]">Vị trí đề xuất</Text>
+              <View className="flex-row justify-between items-center mb-3">
+                <View className="flex-row items-center gap-1.5">
+                  <Route size={14} color="#0878f9" />
+                  <Text className="text-xs font-bold text-[#475569]">Vị trí đề xuất</Text>
+                </View>
 
                 <TouchableOpacity
                   onPress={() => setMapVisible(true)}
-                  className="bg-white border border-[#cbd5e1] px-3 py-1.5 rounded-xl shadow-sm"
+                  className="bg-white border border-[#cbd5e1] px-3 py-1.5 rounded-xl shadow-sm flex-row items-center gap-1.5"
                 >
+                  <MapPin size={12} color="#334155" />
                   <Text className="text-xs font-extrabold text-[#1e293b]">Mở bản đồ kho</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Primary Location Card */}
-              <TouchableOpacity
-                onPress={() => handleOpenScanConfirm(primaryCellCode)}
-                className="bg-[#eff6ff] p-4 rounded-2xl border-2 border-[#2563eb] shadow-sm flex-row justify-between items-center"
-              >
-                <View className="flex-1 mr-2">
-                  <View className="flex-row items-center gap-2 mb-1">
-                    <Text className="text-base font-extrabold text-[#1e3a8a]">{primaryCellCode}</Text>
-                    <View className="bg-[#1d4ed8] px-2 py-0.5 rounded-md">
-                      <Text className="text-[10px] font-bold text-white">Ưu tiên</Text>
-                    </View>
-                  </View>
-                  <Text className="text-xs text-[#3b82f6]">Tầng 1 · Khoang 1 · 25.3 m</Text>
-                  <Text className="text-xs font-bold text-[#1e40af] mt-0.5">Đã có cùng SKU</Text>
+              {/* Loading state */}
+              {loadingSuggestions ? (
+                <View className="flex-row items-center gap-2 py-3">
+                  <ActivityIndicator size="small" color="#0878f9" />
+                  <Text className="text-xs text-[#64748b]">Đang tính vị trí và đường đi...</Text>
                 </View>
+              ) : null}
 
-                <View className="bg-[#1d4ed8] px-3 py-2 rounded-xl">
-                  <Text className="text-xs font-bold text-white">Chọn cất</Text>
+              {/* Error state */}
+              {!loadingSuggestions && suggestionsError ? (
+                <View className="bg-[#fff1f2] border border-[#fecdd3] p-3 rounded-xl mb-2">
+                  <Text className="text-xs text-[#be123c]">{suggestionsError}</Text>
                 </View>
-              </TouchableOpacity>
+              ) : null}
+
+              {/* Empty state */}
+              {!loadingSuggestions && !suggestionsError && suggestions.length === 0 ? (
+                <View className="bg-[#fffbeb] border border-[#fde68a] p-3 rounded-xl mb-2 flex-row items-center gap-2">
+                  <AlertTriangle size={14} color="#92400e" />
+                  <Text className="text-xs text-[#92400e] flex-1">
+                    Chưa có khoang đủ điều kiện hoặc rack chưa nối với lối đi.
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Suggestion cards grid — mirrors web */}
+              {!loadingSuggestions && suggestions.length > 0 ? (
+                <View className="gap-2">
+                  {suggestions.map((suggestion, index) => {
+                    const cellCode = suggestion.cellCode || suggestion.shelfCode || '';
+                    const isSelected = chosenCellId === (suggestion.cellId || cellCode);
+                    const reasonLabel =
+                      suggestion.reason === 'SAME_SKU_LOT_CELL'
+                        ? 'Đã có cùng SKU và lô'
+                        : suggestion.reason === 'SAME_SKU_CELL'
+                        ? 'Đã có cùng SKU'
+                        : suggestion.reason === 'BEST_FIT_VOLUME'
+                        ? 'Vừa thể tích nhất'
+                        : `Chứa thêm ${suggestion.capacity ?? 0} thùng`;
+
+                    return (
+                      <TouchableOpacity
+                        key={`${suggestion.cellId}-${index}`}
+                        onPress={() => {
+                          const id = suggestion.cellId || cellCode;
+                          setChosenCellId(id);
+                          setTargetCellCode(cellCode);
+                        }}
+                        activeOpacity={0.8}
+                        className={`rounded-xl border p-3 ${
+                          isSelected
+                            ? 'border-[#0878f9] bg-[#eff6ff]'
+                            : 'border-[#e2e8f0] bg-white'
+                        }`}
+                      >
+                        {/* Row 1: cell code + Ưu tiên badge */}
+                        <View className="flex-row items-center justify-between">
+                          <Text className="font-mono text-sm font-bold text-[#0f172a]">
+                            {cellCode}
+                          </Text>
+                          {index === 0 ? (
+                            <View className="bg-[#1d4ed8] px-2 py-0.5 rounded-md">
+                              <Text className="text-[10px] font-bold text-white">Ưu tiên</Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {/* Row 2: Tầng · Khoang · distance */}
+                        <Text className="text-[11px] text-[#64748b] mt-1.5">
+                          Tầng {suggestion.level ?? '—'} · Khoang {suggestion.bay ?? '—'}{suggestion.path?.distanceM != null ? ` · ${suggestion.path.distanceM} m` : ''}
+                        </Text>
+
+                        {/* Row 3: reason */}
+                        <Text className="text-[11px] font-semibold text-[#0f172a] mt-1">
+                          {reasonLabel}
+                        </Text>
+
+                        {/* Row 4: HSD (if any) */}
+                        {suggestion.path?.distanceM != null || suggestion.fillPercent != null ? (
+                          <Text className="text-[11px] text-[#64748b] mt-0.5">
+                            {suggestion.fillPercent != null ? `Đầy ${suggestion.fillPercent}%` : ''}
+                          </Text>
+                        ) : null}
+
+                        {/* Confirm button when selected */}
+                        {isSelected ? (
+                          <TouchableOpacity
+                            onPress={() => handleOpenScanConfirm(cellCode)}
+                            className="mt-2.5 bg-[#1d4ed8] py-2 rounded-xl items-center"
+                          >
+                            <Text className="text-xs font-bold text-white">Chọn cất vào đây</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
             </View>
           )}
         </ScrollView>
 
         {/* 2D Route Map Modal matching Web Image 3 */}
-        <WarehouseRouteMapModal
-          visible={mapVisible}
-          onClose={() => setMapVisible(false)}
-          targetLocation={primaryCellCode}
-          readOnly={isCompleted}
-          onSelectLocation={(loc) => {
-            setTargetCellCode(loc);
-          }}
-          onConfirmScanCell={(loc) => {
-            if (!isCompleted) {
-              handleOpenScanConfirm(loc);
-            }
-          }}
-        />
+        {(() => {
+          const activeSuggestion = suggestions.find(
+            (s) => (s.cellId && s.cellId === chosenCellId) || (s.cellCode && s.cellCode === targetCellCode),
+          ) || suggestions[0];
+
+          return (
+            <WarehouseRouteMapModal
+              visible={mapVisible}
+              onClose={() => setMapVisible(false)}
+              path={activeSuggestion?.path}
+              targetLocation={primaryCellCode}
+              readOnly={isCompleted}
+              onSelectLocation={(loc) => {
+                setTargetCellCode(loc);
+              }}
+              onConfirmScanCell={(loc) => {
+                if (!isCompleted) {
+                  handleOpenScanConfirm(loc);
+                }
+              }}
+            />
+          );
+        })()}
 
         {/* Scan Confirmation Modal matching Web Image 5 */}
         <PutawayScanConfirmModal

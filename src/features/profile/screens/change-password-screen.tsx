@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, BackHandler, Text, TextInput, View } from 'react-native';
+import { BackHandler, Text, TextInput, View } from 'react-native';
 import axios from 'axios';
 import { ArrowLeft, AlertCircle, CheckCircle2, KeyRound, Lock } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { authApi } from '@/features/auth/api/auth-api';
 import { colors } from '@/shared/theme/tokens';
-import { AppButton, AppHeader, IconButton, Screen, Surface } from '@/shared/ui';
+import { AppAlertModal, AppAlertModalProps, AppButton, AppHeader, IconButton, Screen, Surface } from '@/shared/ui';
 
 export function ChangePasswordScreen() {
   const router = useRouter();
@@ -15,6 +15,12 @@ export function ChangePasswordScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Custom App UI Alert state
+  const [alertState, setAlertState] = useState<AppAlertModalProps | null>(null);
+  const showAlert = (config: Omit<AppAlertModalProps, 'visible'>) => {
+    setAlertState({ ...config, visible: true, onClose: () => setAlertState(null) });
+  };
 
   function handleGoBack() {
     router.replace('/profile');
@@ -36,35 +42,30 @@ export function ChangePasswordScreen() {
     if (!oldPassword) {
       const msg = 'Vui lòng nhập mật khẩu hiện tại.';
       setError(msg);
-      Alert.alert('Thông báo', msg);
       return;
     }
 
     if (!newPassword) {
       const msg = 'Vui lòng nhập mật khẩu mới.';
       setError(msg);
-      Alert.alert('Thông báo', msg);
       return;
     }
 
     if (newPassword.length < 8) {
       const msg = 'Mật khẩu mới phải có độ dài tối thiểu 8 ký tự.';
       setError(msg);
-      Alert.alert('Thông báo', msg);
       return;
     }
 
     if (oldPassword === newPassword) {
       const msg = 'Mật khẩu mới không được trùng với mật khẩu hiện tại.';
       setError(msg);
-      Alert.alert('Thông báo', msg);
       return;
     }
 
     if (newPassword !== confirmPassword) {
       const msg = 'Mật khẩu xác nhận không khớp.';
       setError(msg);
-      Alert.alert('Thông báo', msg);
       return;
     }
 
@@ -76,12 +77,16 @@ export function ChangePasswordScreen() {
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      Alert.alert('Thành công', okMsg, [
-        {
-          text: 'OK',
-          onPress: handleGoBack,
+      showAlert({
+        title: 'Thành công',
+        message: okMsg,
+        variant: 'success',
+        confirmText: 'OK',
+        onConfirm: () => {
+          setAlertState(null);
+          handleGoBack();
         },
-      ]);
+      });
     } catch (err: unknown) {
       let errMsg = 'Đổi mật khẩu thất bại. Vui lòng kiểm tra lại.';
       if (axios.isAxiosError(err)) {
@@ -99,7 +104,6 @@ export function ChangePasswordScreen() {
         errMsg = err.message;
       }
       setError(errMsg);
-      Alert.alert('Đổi mật khẩu thất bại', errMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -234,6 +238,9 @@ export function ChangePasswordScreen() {
           />
         </View>
       </Surface>
+
+      {/* App UI Alert Modal */}
+      <AppAlertModal {...(alertState || { title: '' })} visible={Boolean(alertState?.visible)} />
     </Screen>
   );
 }

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   ScrollView,
@@ -15,7 +14,7 @@ import { useAuth } from '@/features/auth/context/auth-context';
 import { ENV } from '@/shared/config/env';
 import { colors } from '@/shared/theme/tokens';
 import { WmsRole } from '@/shared/types/auth';
-import { AppButton, StatusBadge } from '@/shared/ui';
+import { AppAlertModal, AppAlertModalProps, AppButton, StatusBadge } from '@/shared/ui';
 import { approveScrapNote, getScrapNote, rejectScrapNote } from '../api/scrap-api';
 import type { ScrapNote } from '../types/scrap';
 
@@ -65,6 +64,12 @@ export function ScrapDetailModal({
   const [rejectReason, setRejectReason] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Custom App UI Alert state
+  const [alertState, setAlertState] = useState<AppAlertModalProps | null>(null);
+  const showAlert = (config: Omit<AppAlertModalProps, 'visible'>) => {
+    setAlertState({ ...config, visible: true, onClose: () => setAlertState(null) });
+  };
+
   useEffect(() => {
     if (visible && scrapNote?.id) {
       setDetailNote(scrapNote);
@@ -93,7 +98,12 @@ export function ScrapDetailModal({
     setErrorMsg(null);
     try {
       const updated = await approveScrapNote(activeNote.id);
-      Alert.alert('Thành công', 'Đã duyệt phiếu hủy hàng và trừ tồn thực tế.');
+      showAlert({
+        title: 'Thành công',
+        message: 'Đã duyệt phiếu hủy hàng và trừ tồn thực tế.',
+        variant: 'success',
+        onConfirm: () => setAlertState(null),
+      });
       setDetailNote(updated);
       onUpdate(updated);
     } catch (err: any) {
@@ -107,7 +117,11 @@ export function ScrapDetailModal({
 
   const handleConfirmReject = async () => {
     if (!rejectReason.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập lý do từ chối phiếu hủy');
+      showAlert({
+        title: 'Thông báo',
+        message: 'Vui lòng nhập lý do từ chối phiếu hủy',
+        variant: 'warning',
+      });
       return;
     }
     setRejecting(true);
@@ -116,7 +130,12 @@ export function ScrapDetailModal({
       const updated = await rejectScrapNote(activeNote.id, {
         rejectReason: rejectReason.trim(),
       });
-      Alert.alert('Thành công', 'Đã từ chối phiếu hủy hàng.');
+      showAlert({
+        title: 'Thành công',
+        message: 'Đã từ chối phiếu hủy hàng.',
+        variant: 'success',
+        onConfirm: () => setAlertState(null),
+      });
       setShowRejectInput(false);
       setRejectReason('');
       setDetailNote(updated);
@@ -300,6 +319,9 @@ export function ScrapDetailModal({
           ) : null}
         </ScrollView>
       </View>
+
+      {/* App UI Alert Modal */}
+      <AppAlertModal {...(alertState || { title: '' })} visible={Boolean(alertState?.visible)} />
     </Modal>
   );
 }

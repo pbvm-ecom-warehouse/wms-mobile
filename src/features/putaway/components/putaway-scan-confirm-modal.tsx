@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   Text,
@@ -14,6 +13,7 @@ import { Camera, CameraView } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { formatApiError } from '@/shared/lib/api-client';
 import { colors } from '@/shared/theme/tokens';
+import { AppAlertModal, AppAlertModalProps } from '@/shared/ui';
 import { confirmPutawayLine } from '../api/putaway-api';
 import type { PutawayTask, PutawayTaskItem } from '../types/putaway';
 
@@ -43,6 +43,12 @@ export function PutawayScanConfirmModal({
   const [quantity, setQuantity] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Custom App UI Alert state
+  const [alertState, setAlertState] = useState<AppAlertModalProps | null>(null);
+  const showAlert = (config: Omit<AppAlertModalProps, 'visible'>) => {
+    setAlertState({ ...config, visible: true, onClose: () => setAlertState(null) });
+  };
 
   // Camera Scanner State
   const [cameraActive, setCameraActive] = useState(false);
@@ -79,15 +85,15 @@ export function PutawayScanConfirmModal({
             quality: 0.8,
           });
           if (!result.canceled && result.assets?.[0]) {
-            Alert.alert('Đã chụp ảnh', 'Đã lưu ảnh từ camera thành công!');
+            showAlert({ title: 'Đã chụp ảnh', message: 'Đã lưu ảnh từ camera thành công!', variant: 'success' });
           }
         } else {
-          Alert.alert('Cần quyền truy cập Camera', 'Vui lòng cấp quyền Camera trong Cài đặt thiết bị để quét mã!');
+          showAlert({ title: 'Cần quyền Camera', message: 'Vui lòng cấp quyền Camera trong Cài đặt thiết bị để quét mã!', variant: 'warning' });
         }
       }
     } catch (err) {
       console.warn('Lỗi xin quyền camera:', err);
-      Alert.alert('Thông báo', 'Không thể khởi động Camera thiết bị.');
+      showAlert({ title: 'Thông báo', message: 'Không thể khởi động Camera thiết bị.', variant: 'warning' });
     }
   };
 
@@ -100,21 +106,21 @@ export function PutawayScanConfirmModal({
       setCellBarcode(scannedCode);
     }
     setCameraActive(false);
-    Alert.alert('Quét mã thành công 🎉', `Mã đã đọc được: ${scannedCode}`);
+    showAlert({ title: 'Quét mã thành công 🎉', message: `Mã đã đọc được: ${scannedCode}`, variant: 'success' });
   };
 
   const handleConfirmSubmit = async () => {
     if (!itemBarcode.trim()) {
-      Alert.alert('Bắt buộc quét mã SKU', 'Vui lòng quét hoặc nhập mã vạch mặt hàng!');
+      showAlert({ title: 'Bắt buộc quét mã SKU', message: 'Vui lòng quét hoặc nhập mã vạch mặt hàng!', variant: 'warning' });
       return;
     }
     if (!cellBarcode.trim()) {
-      Alert.alert('Bắt buộc quét mã khoang', 'Vui lòng chọn hoặc quét mã khoang/kệ!');
+      showAlert({ title: 'Bắt buộc quét mã khoang', message: 'Vui lòng chọn hoặc quét mã khoang/kệ!', variant: 'warning' });
       return;
     }
     const qtyNum = Number(quantity);
     if (isNaN(qtyNum) || qtyNum <= 0) {
-      Alert.alert('Thông báo', 'Số lượng xác nhận cất phải lớn hơn 0');
+      showAlert({ title: 'Thông báo', message: 'Số lượng xác nhận cất phải lớn hơn 0', variant: 'warning' });
       return;
     }
 
@@ -131,12 +137,16 @@ export function PutawayScanConfirmModal({
         lotId: item.lotId || undefined,
       });
 
-      Alert.alert(
-        'Xác nhận thành công 🎉',
-        `Đã lưu cất ${qtyNum} thùng hàng vào khoang ${cellBarcode.trim()}`,
-      );
-      onSuccess(updated);
-      onClose();
+      showAlert({
+        title: 'Xác nhận thành công 🎉',
+        message: `Đã lưu cất ${qtyNum} thùng hàng vào khoang ${cellBarcode.trim()}`,
+        variant: 'success',
+        onConfirm: () => {
+          setAlertState(null);
+          onSuccess(updated);
+          onClose();
+        },
+      });
     } catch (err: any) {
       setErrorMsg(formatApiError(err));
     } finally {
@@ -285,6 +295,9 @@ export function PutawayScanConfirmModal({
           </View>
         </View>
       </View>
+
+      {/* App UI Alert Modal */}
+      <AppAlertModal {...(alertState || { title: '' })} visible={Boolean(alertState?.visible)} />
     </Modal>
   );
 }

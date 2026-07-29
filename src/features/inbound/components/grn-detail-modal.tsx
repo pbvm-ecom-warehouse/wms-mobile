@@ -24,7 +24,7 @@ import { useAuth } from '@/features/auth/context/auth-context';
 import { ENV } from '@/shared/config/env';
 import { colors } from '@/shared/theme/tokens';
 import { WmsRole } from '@/shared/types/auth';
-import { AppButton, StatusBadge } from '@/shared/ui';
+import { AppAlertModal, AppAlertModalProps, AppButton, StatusBadge } from '@/shared/ui';
 import {
   approveGoodsReceiptNote,
   deleteGoodsReceiptNote,
@@ -32,9 +32,10 @@ import {
   getGoodsReceiptNote,
   rejectGoodsReceiptNote,
   submitGoodsReceiptNote,
+  updateGoodsReceiptNoteItems,
   uploadGrnImage,
 } from '../api/grn-api';
-import type { GoodsReceiptNote } from '../types/grn';
+import type { CreateGoodsReceiptNoteItemInput, GoodsReceiptNote } from '../types/grn';
 
 function resolveImageUrl(uri?: string): string {
   if (!uri) return '';
@@ -94,7 +95,7 @@ interface GrnDetailModalProps {
   onDelete?: (grnId: string) => void;
 }
 
-const deletedImagesMap: Record<string, Set<string>> = {};
+
 
 export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: GrnDetailModalProps) {
   const { user } = useAuth();
@@ -109,30 +110,31 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
   const [uploadingImage, setUploadingImage] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Custom App UI Alert/Confirm state
+  const [alertState, setAlertState] = useState<AppAlertModalProps | null>(null);
+
+  const showAlert = (config: Omit<AppAlertModalProps, 'visible'>) => {
+    setAlertState({
+      ...config,
+      visible: true,
+      onClose: () => setAlertState(null),
+    });
+  };
+
+  // Edit items mode state
+  const [isEditingItems, setIsEditingItems] = useState(false);
+  const [editableItems, setEditableItems] = useState<CreateGoodsReceiptNoteItemInput[]>([]);
+  const [savingItems, setSavingItems] = useState(false);
+
   useEffect(() => {
     if (visible && grn?.id) {
       setErrorMsg(null);
-      let initialGrn = grn;
-      const deletedSet = deletedImagesMap[grn.id];
-      if (deletedSet && initialGrn.images) {
-        initialGrn = {
-          ...initialGrn,
-          images: initialGrn.images.filter((img) => !deletedSet.has(img)),
-        };
-      }
-      setDetailGrn(initialGrn);
+      setDetailGrn(grn);
       setLoadingDetail(true);
       getGoodsReceiptNote(grn.id)
         .then((fresh) => {
           if (fresh) {
-            let filteredFresh = fresh;
-            if (deletedSet && fresh.images) {
-              filteredFresh = {
-                ...fresh,
-                images: fresh.images.filter((img) => !deletedSet.has(img)),
-              };
-            }
-            setDetailGrn(filteredFresh);
+            setDetailGrn(fresh);
           }
         })
         .catch((err) => {
@@ -144,14 +146,18 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     } else {
       setDetailGrn(null);
     }
+    setIsEditingItems(false);
+    setEditableItems([]);
   }, [visible, grn?.id]);
 
   const activeGrn = detailGrn || grn;
   if (!activeGrn) return null;
 
   const userRole = user?.role?.toUpperCase();
+  const isDraftOrRejected = activeGrn.status === 'DRAFT' || activeGrn.status === 'REJECTED';
+
   const canSubmit =
-    activeGrn.status === 'DRAFT' &&
+    isDraftOrRejected &&
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
 
   const canApproveOrReject =
@@ -159,96 +165,140 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     (userRole === WmsRole.MANAGER || userRole === WmsRole.ADMIN);
 
   const canDelete =
-    activeGrn.status === 'DRAFT' &&
+    isDraftOrRejected &&
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN);
 
   const hasImages = Boolean(activeGrn.images && activeGrn.images.length > 0);
 
   const canUploadImage =
-    activeGrn.status === 'DRAFT' &&
+    isDraftOrRejected &&
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
 
   const canDeleteImage =
-    activeGrn.status === 'DRAFT' &&
+    isDraftOrRejected &&
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
 
   const handleDeleteImage = (index: number) => {
     const targetImage = activeGrn.images?.[index];
-    Alert.alert(
-      'Xóa ảnh minh chứng',
-      'Bạn có chắc chắn muốn xóa ảnh minh chứng này khỏi phiếu nháp?',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa ảnh',
-          style: 'destructive',
-          onPress: async () => {
-            setErrorMsg(null);
-            if (targetImage) {
-              if (!deletedImagesMap[activeGrn.id]) {
-                deletedImagesMap[activeGrn.id] = new Set();
-              }
-              deletedImagesMap[activeGrn.id].add(targetImage);
-            }
-            const updatedImages = (activeGrn.images || []).filter((_, i) => i !== index);
-            const updatedGrn = { ...activeGrn, images: updatedImages };
-            setDetailGrn(updatedGrn);
-            onUpdate(updatedGrn);
-            try {
-              const res = await deleteGrnImage(activeGrn.id, index, targetImage, updatedImages);
-              if (res && res.images) {
-                const deletedSet = deletedImagesMap[activeGrn.id];
-                const cleanImages = res.images.filter((img) => !deletedSet?.has(img));
-                const freshGrn = { ...activeGrn, ...res, images: cleanImages };
-                setDetailGrn(freshGrn);
-                onUpdate(freshGrn);
-              }
-            } catch (err: any) {
-              console.warn('Lỗi xóa ảnh GRN:', err);
-            }
-          },
-        },
-      ],
-    );
+    showAlert({
+      title: 'Xóa ảnh minh chứng',
+      message: 'Bạn có chắc chắn muốn xóa ảnh minh chứng này khỏi phiếu nháp?',
+      variant: 'danger',
+      confirmText: 'Xóa ảnh',
+      cancelText: 'Hủy',
+      onConfirm: async () => {
+        setAlertState(null);
+        setErrorMsg(null);
+        const updatedImages = (activeGrn.images || []).filter((_, i) => i !== index);
+        const updatedGrn = { ...activeGrn, images: updatedImages };
+        setDetailGrn(updatedGrn);
+        onUpdate(updatedGrn);
+        try {
+          const res = await deleteGrnImage(activeGrn.id, index, targetImage, updatedImages);
+          if (res && res.images) {
+            const freshGrn = { ...activeGrn, ...res };
+            setDetailGrn(freshGrn);
+            onUpdate(freshGrn);
+          }
+        } catch (err: any) {
+          console.warn('Lỗi xóa ảnh GRN:', err);
+        }
+      },
+    });
   };
 
-  const handleDelete = async () => {
-    Alert.alert(
-      'Xác nhận xóa phiếu',
-      `Bạn có chắc chắn muốn xóa vĩnh viễn phiếu nhập kho ${activeGrn.grnNumber || activeGrn.id} không? Hành động này không thể hoàn tác.`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa phiếu',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            setErrorMsg(null);
-            try {
-              await deleteGoodsReceiptNote(activeGrn.id);
-              Alert.alert('Thành công', 'Đã xóa phiếu nhập kho thành công');
-              if (onDelete) onDelete(activeGrn.id);
-              onClose();
-            } catch (err: any) {
-              const msg =
-                err?.response?.data?.message || err?.message || 'Xóa phiếu nhập kho thất bại';
-              setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ],
-    );
+  const handleDelete = () => {
+    showAlert({
+      title: 'Xác nhận xóa phiếu',
+      message: `Bạn có chắc chắn muốn xóa vĩnh viễn phiếu nhập kho ${activeGrn.grnNumber || activeGrn.id} không? Hành động này không thể hoàn tác.`,
+      variant: 'danger',
+      confirmText: 'Xóa phiếu',
+      cancelText: 'Hủy',
+      onConfirm: async () => {
+        setAlertState(null);
+        setDeleting(true);
+        setErrorMsg(null);
+        try {
+          await deleteGoodsReceiptNote(activeGrn.id);
+          if (onDelete) onDelete(activeGrn.id);
+          onClose();
+        } catch (err: any) {
+          const msg =
+            err?.response?.data?.message || err?.message || 'Xóa phiếu nhập kho thất bại';
+          setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
+  };
+
+  const startEditItems = () => {
+    if (!activeGrn.items) return;
+    const initial: CreateGoodsReceiptNoteItemInput[] = activeGrn.items.map((item) => ({
+      itemId: item.itemId,
+      actualQty: item.actualQty ?? 1,
+      lotNumber: item.lotNumber || '',
+      manufacturedDate: item.manufacturedDate ? item.manufacturedDate.split('T')[0] : '',
+      expiryDate: item.expiryDate ? item.expiryDate.split('T')[0] : '',
+      note: item.note || '',
+    }));
+    setEditableItems(initial);
+    setIsEditingItems(true);
+  };
+
+  const updateEditableItemField = (index: number, field: keyof CreateGoodsReceiptNoteItemInput, value: any) => {
+    setEditableItems((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const handleSaveItems = async (): Promise<GoodsReceiptNote | null> => {
+    setSavingItems(true);
+    setErrorMsg(null);
+    try {
+      const updated = await updateGoodsReceiptNoteItems(activeGrn.id, editableItems);
+      showAlert({
+        title: 'Thành công',
+        message: 'Đã lưu thay đổi các sản phẩm nhập kho',
+        variant: 'success',
+      });
+      setDetailGrn(updated);
+      onUpdate(updated);
+      setIsEditingItems(false);
+      return updated;
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message || err?.message || 'Cập nhật thông tin dòng hàng thất bại';
+      setErrorMsg(Array.isArray(msg) ? msg.join('\n') : msg);
+      return null;
+    } finally {
+      setSavingItems(false);
+    }
   };
 
   const handleSubmitGrn = async () => {
     setSubmitting(true);
     setErrorMsg(null);
     try {
-      const updated = await submitGoodsReceiptNote(activeGrn.id);
+      let targetId = activeGrn.id;
+      if (isEditingItems) {
+        const saved = await handleSaveItems();
+        if (!saved) {
+          setSubmitting(false);
+          return;
+        }
+      }
+      const updated = await submitGoodsReceiptNote(targetId);
       const fresh = { ...activeGrn, ...updated, status: 'PENDING_APPROVAL' as const };
-      Alert.alert('Thành công', 'Đã gửi duyệt phiếu nhập kho');
+      const successMsg = activeGrn.status === 'REJECTED' ? 'Đã gửi duyệt lại phiếu nhập kho thành công' : 'Đã gửi duyệt phiếu nhập kho thành công';
+      showAlert({
+        title: 'Thành công',
+        message: successMsg,
+        variant: 'success',
+      });
       setDetailGrn(fresh);
       onUpdate(fresh);
     } catch (err: any) {
@@ -266,7 +316,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     try {
       const updated = await approveGoodsReceiptNote(activeGrn.id);
       const fresh = { ...activeGrn, ...updated, status: 'APPROVED' as const };
-      Alert.alert('Thành công', 'Đã duyệt phiếu nhập kho');
+      showAlert({
+        title: 'Thành công',
+        message: 'Đã duyệt phiếu nhập kho',
+        variant: 'success',
+      });
       setDetailGrn(fresh);
       onUpdate(fresh);
     } catch (err: any) {
@@ -280,7 +334,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
 
   const handleConfirmReject = async () => {
     if (!rejectReason.trim()) {
-      Alert.alert('Cảnh báo', 'Vui lòng nhập lý do từ chối phiếu nhập.');
+      showAlert({
+        title: 'Cảnh báo',
+        message: 'Vui lòng nhập lý do từ chối phiếu nhập.',
+        variant: 'warning',
+      });
       return;
     }
 
@@ -289,7 +347,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     try {
       const updated = await rejectGoodsReceiptNote(activeGrn.id, rejectReason.trim());
       const fresh = { ...activeGrn, ...updated, status: 'REJECTED' as const, rejectionReason: rejectReason.trim() };
-      Alert.alert('Thành công', 'Đã từ chối phiếu nhập kho và gửi lý do phản hồi');
+      showAlert({
+        title: 'Thành công',
+        message: 'Đã từ chối phiếu nhập kho và gửi lý do phản hồi',
+        variant: 'success',
+      });
       setShowRejectModal(false);
       setRejectReason('');
       setDetailGrn(fresh);
@@ -308,7 +370,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     setErrorMsg(null);
     try {
       const updated = await uploadGrnImage(activeGrn.id, uri);
-      Alert.alert('Thành công', 'Đã tải ảnh minh chứng nhập kho lên hệ thống');
+      showAlert({
+        title: 'Thành công',
+        message: 'Đã tải ảnh minh chứng nhập kho lên hệ thống',
+        variant: 'success',
+      });
       setDetailGrn(updated);
       onUpdate(updated);
     } catch (err: any) {
@@ -324,10 +390,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Cần cấp quyền',
-          'Ứng dụng cần quyền truy cập máy ảnh để chụp ảnh minh chứng nhập kho.',
-        );
+        showAlert({
+          title: 'Cần cấp quyền',
+          message: 'Ứng dụng cần quyền truy cập máy ảnh để chụp ảnh minh chứng nhập kho.',
+          variant: 'warning',
+        });
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -340,7 +407,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
         await handleUploadImageUri(result.assets[0].uri);
       }
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể mở máy ảnh');
+      showAlert({
+        title: 'Lỗi',
+        message: err?.message || 'Không thể mở máy ảnh',
+        variant: 'danger',
+      });
     }
   };
 
@@ -348,10 +419,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Cần cấp quyền',
-          'Ứng dụng cần quyền truy cập thư viện ảnh để chọn ảnh minh chứng nhập kho.',
-        );
+        showAlert({
+          title: 'Cần cấp quyền',
+          message: 'Ứng dụng cần quyền truy cập thư viện ảnh để chọn ảnh minh chứng nhập kho.',
+          variant: 'warning',
+        });
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -364,7 +436,11 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
         await handleUploadImageUri(result.assets[0].uri);
       }
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể mở thư viện ảnh');
+      showAlert({
+        title: 'Lỗi',
+        message: err?.message || 'Không thể mở thư viện ảnh',
+        variant: 'danger',
+      });
     }
   };
 
@@ -440,58 +516,152 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
 
           {/* Items Detail */}
           <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-4">
-            <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">
-              Danh sách sản phẩm nhập kho
-            </Text>
+            <View className="flex-row justify-between items-center mb-2">
+              <Text className="text-xs font-bold text-[#6c7078] uppercase">
+                Danh sách sản phẩm nhập kho
+              </Text>
+              {canSubmit ? (
+                <TouchableOpacity
+                  onPress={isEditingItems ? () => setIsEditingItems(false) : startEditItems}
+                  className="px-2.5 py-1 rounded-lg bg-[#eaf3ff] border border-[#0878f9]"
+                >
+                  <Text className="text-xs font-bold text-[#0878f9]">
+                    {isEditingItems ? 'Hủy sửa' : 'Chỉnh sửa'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
 
             {activeGrn.items && activeGrn.items.length > 0 ? (
-              activeGrn.items.map((item, idx) => (
-                <View
-                  key={item.itemId || idx}
-                  className="bg-[#f5f6f8] p-3 rounded-xl mb-2 border border-[#e4e5e9]"
-                >
-                  <View className="flex-row justify-between items-center">
-                    <Text className="text-sm font-bold text-[#101114] flex-1 mr-2">
-                      {item.itemName || item.sku}
-                    </Text>
-                    <View className="bg-[#eaf3ff] px-2 py-0.5 rounded-lg">
-                      <Text className="text-xs font-bold text-[#0878f9]">
-                        {item.actualQty} {item.unit || 'thùng'}
+              activeGrn.items.map((item, idx) => {
+                const editState = editableItems[idx];
+                return (
+                  <View
+                    key={item.itemId || idx}
+                    className="bg-[#f5f6f8] p-3 rounded-xl mb-2.5 border border-[#e4e5e9]"
+                  >
+                    <View className="flex-row justify-between items-center mb-1">
+                      <Text className="text-sm font-bold text-[#101114] flex-1 mr-2">
+                        {item.itemName || item.sku}
                       </Text>
+                      {!isEditingItems ? (
+                        <View className="bg-[#eaf3ff] px-2 py-0.5 rounded-lg">
+                          <Text className="text-xs font-bold text-[#0878f9]">
+                            {item.actualQty} {item.unit || 'thùng'}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
+                    <Text className="text-xs text-[#6c7078] mb-1.5">SKU: {item.sku}</Text>
+
+                    {isEditingItems ? (
+                      <View className="mt-2 pt-2 border-t border-[#e4e5e9]/70 gap-2">
+                        <View className="flex-row gap-2">
+                          <View className="flex-1">
+                            <Text className="text-[11px] font-semibold text-[#475569] mb-1">
+                              Số lượng ({item.unit || 'thùng'})
+                            </Text>
+                            <TextInput
+                              keyboardType="numeric"
+                              className="bg-white border border-[#cbd5e1] rounded-xl px-3 py-1.5 text-xs font-bold text-[#101114]"
+                              value={String(editState?.actualQty ?? '')}
+                              onChangeText={(val) => {
+                                const num = parseInt(val, 10);
+                                updateEditableItemField(idx, 'actualQty', isNaN(num) ? 0 : num);
+                              }}
+                            />
+                          </View>
+                          <View className="flex-1">
+                            <Text className="text-[11px] font-semibold text-[#475569] mb-1">Số lô (Lot)</Text>
+                            <TextInput
+                              className="bg-white border border-[#cbd5e1] rounded-xl px-3 py-1.5 text-xs text-[#101114]"
+                              value={editState?.lotNumber || ''}
+                              onChangeText={(val) => updateEditableItemField(idx, 'lotNumber', val)}
+                              placeholder="LOT-XXX"
+                            />
+                          </View>
+                        </View>
+
+                        <View className="flex-row gap-2">
+                          <View className="flex-1">
+                            <Text className="text-[11px] font-semibold text-[#475569] mb-1">Ngày SX (YYYY-MM-DD)</Text>
+                            <TextInput
+                              className="bg-white border border-[#cbd5e1] rounded-xl px-3 py-1.5 text-xs text-[#101114]"
+                              value={editState?.manufacturedDate || ''}
+                              onChangeText={(val) => updateEditableItemField(idx, 'manufacturedDate', val)}
+                              placeholder="2026-07-29"
+                            />
+                          </View>
+                          <View className="flex-1">
+                            <Text className="text-[11px] font-semibold text-[#475569] mb-1">Hạn dùng (YYYY-MM-DD)</Text>
+                            <TextInput
+                              className="bg-white border border-[#cbd5e1] rounded-xl px-3 py-1.5 text-xs text-[#101114]"
+                              value={editState?.expiryDate || ''}
+                              onChangeText={(val) => updateEditableItemField(idx, 'expiryDate', val)}
+                              placeholder="2027-07-29"
+                            />
+                          </View>
+                        </View>
+
+                        <View>
+                          <Text className="text-[11px] font-semibold text-[#475569] mb-1">Ghi chú</Text>
+                          <TextInput
+                            className="bg-white border border-[#cbd5e1] rounded-xl px-3 py-1.5 text-xs text-[#101114]"
+                            value={editState?.note || ''}
+                            onChangeText={(val) => updateEditableItemField(idx, 'note', val)}
+                            placeholder="Ghi chú thêm..."
+                          />
+                        </View>
+                      </View>
+                    ) : (
+                      <>
+                        {item.manufacturedDate || item.lotNumber || item.expiryDate ? (
+                          <View className="flex-row flex-wrap gap-x-4 gap-y-1 mt-1.5 pt-1.5 border-t border-[#e4e5e9]/50">
+                            {item.manufacturedDate ? (
+                              <Text className="text-xs text-[#6c7078]">
+                                NSX: <Text className="text-xs font-bold text-[#101114]">{formatDateOnly(item.manufacturedDate)}</Text>
+                              </Text>
+                            ) : null}
+                            {item.lotNumber ? (
+                              <Text className="text-xs text-[#6c7078]">
+                                Số lô: <Text className="text-xs font-bold text-[#101114]">{item.lotNumber}</Text>
+                              </Text>
+                            ) : null}
+                            {item.expiryDate ? (
+                              <Text className="text-xs text-[#6c7078]">
+                                Hạn dùng: <Text className="text-xs font-bold text-[#101114]">{formatDateOnly(item.expiryDate)}</Text>
+                              </Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+
+                        {item.note ? (
+                          <Text className="text-xs italic text-[#6c7078] mt-1">
+                            Ghi chú: {item.note}
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
                   </View>
-                  <Text className="text-xs text-[#6c7078]">SKU: {item.sku}</Text>
-
-                  {item.manufacturedDate || item.lotNumber || item.expiryDate ? (
-                    <View className="flex-row flex-wrap gap-x-4 gap-y-1 mt-1.5 pt-1.5 border-t border-[#e4e5e9]/50">
-                      {item.manufacturedDate ? (
-                        <Text className="text-xs text-[#6c7078]">
-                          NSX: <Text className="text-xs font-bold text-[#101114]">{formatDateOnly(item.manufacturedDate)}</Text>
-                        </Text>
-                      ) : null}
-                      {item.lotNumber ? (
-                        <Text className="text-xs text-[#6c7078]">
-                          Số lô: <Text className="text-xs font-bold text-[#101114]">{item.lotNumber}</Text>
-                        </Text>
-                      ) : null}
-                      {item.expiryDate ? (
-                        <Text className="text-xs text-[#6c7078]">
-                          Hạn dùng: <Text className="text-xs font-bold text-[#101114]">{formatDateOnly(item.expiryDate)}</Text>
-                        </Text>
-                      ) : null}
-                    </View>
-                  ) : null}
-
-                  {item.note ? (
-                    <Text className="text-xs italic text-[#6c7078] mt-1">
-                      Ghi chú: {item.note}
-                    </Text>
-                  ) : null}
-                </View>
-              ))
+                );
+              })
             ) : (
               <Text className="text-xs italic text-[#6c7078]">Không có dòng hàng nào.</Text>
             )}
+
+            {isEditingItems ? (
+              <TouchableOpacity
+                onPress={handleSaveItems}
+                disabled={savingItems}
+                className="bg-[#0878f9] py-2.5 px-4 rounded-xl flex-row justify-center items-center mt-2 shadow-sm"
+              >
+                {savingItems ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text className="text-xs font-extrabold text-white">Lưu thay đổi sản phẩm</Text>
+                )}
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {/* Evidence Images */}
@@ -564,7 +734,7 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
           <View className="mb-8 gap-2.5">
             {canSubmit ? (
               <AppButton
-                label="Gửi Duyệt Phiếu Nhập Kho"
+                label={activeGrn.status === 'REJECTED' ? 'Gửi Duyệt Lại Phiếu Nhập Kho' : 'Gửi Duyệt Phiếu Nhập Kho'}
                 loading={submitting}
                 onPress={handleSubmitGrn}
                 icon={<CheckCircle2 size={18} color="#ffffff" />}
@@ -657,6 +827,9 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Custom Stock Mate App UI Alert / Confirm Modal */}
+      <AppAlertModal {...(alertState || { title: '' })} visible={Boolean(alertState?.visible)} />
     </Modal>
   );
 }

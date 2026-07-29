@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   ScrollView,
@@ -14,7 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Camera, CheckCircle2, ImageIcon, X } from 'lucide-react-native';
 import { listProducts, type WarehouseItem } from '@/features/products/api/products-api';
 import { colors } from '@/shared/theme/tokens';
-import { AppButton } from '@/shared/ui';
+import { AppAlertModal, AppAlertModalProps, AppButton } from '@/shared/ui';
 import { createScrapNote } from '../api/scrap-api';
 import type { ScrapNote } from '../types/scrap';
 
@@ -39,6 +38,12 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Custom App UI Alert state
+  const [alertState, setAlertState] = useState<AppAlertModalProps | null>(null);
+  const showAlert = (config: Omit<AppAlertModalProps, 'visible'>) => {
+    setAlertState({ ...config, visible: true, onClose: () => setAlertState(null) });
+  };
+
   useEffect(() => {
     if (visible) {
       setLoadingProducts(true);
@@ -58,7 +63,11 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Cần cấp quyền', 'Ứng dụng cần quyền camera để chụp ảnh minh chứng hủy hàng.');
+        showAlert({
+          title: 'Cần cấp quyền',
+          message: 'Ứng dụng cần quyền camera để chụp ảnh minh chứng hủy hàng.',
+          variant: 'warning',
+        });
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -71,7 +80,7 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
         setEvidenceImages((prev) => [...prev, result.assets[0].uri]);
       }
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể mở camera');
+      showAlert({ title: 'Lỗi', message: err?.message || 'Không thể mở camera', variant: 'danger' });
     }
   };
 
@@ -79,7 +88,11 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Cần cấp quyền', 'Ứng dụng cần quyền thư viện ảnh để chọn ảnh minh chứng.');
+        showAlert({
+          title: 'Cần cấp quyền',
+          message: 'Ứng dụng cần quyền thư viện ảnh để chọn ảnh minh chứng.',
+          variant: 'warning',
+        });
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -94,7 +107,7 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
         setEvidenceImages((prev) => [...prev, ...uris]);
       }
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể mở thư viện ảnh');
+      showAlert({ title: 'Lỗi', message: err?.message || 'Không thể mở thư viện ảnh', variant: 'danger' });
     }
   };
 
@@ -104,23 +117,23 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
 
   const handleSubmit = async () => {
     if (!selectedProduct) {
-      Alert.alert('Thông báo', 'Vui lòng chọn sản phẩm cần đề xuất hủy');
+      showAlert({ title: 'Thông báo', message: 'Vui lòng chọn sản phẩm cần đề xuất hủy', variant: 'warning' });
       return;
     }
 
     const qtyNum = Number(quantity);
     if (isNaN(qtyNum) || qtyNum <= 0) {
-      Alert.alert('Thông báo', 'Số lượng hủy phải lớn hơn 0');
+      showAlert({ title: 'Thông báo', message: 'Số lượng hủy phải lớn hơn 0', variant: 'warning' });
       return;
     }
 
     if (!shelfId.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập vị trí/kệ hàng (Shelf ID)');
+      showAlert({ title: 'Thông báo', message: 'Vui lòng nhập vị trí/kệ hàng (Shelf ID)', variant: 'warning' });
       return;
     }
 
     if (!reason.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập lý do hủy hàng');
+      showAlert({ title: 'Thông báo', message: 'Vui lòng nhập lý do hủy hàng', variant: 'warning' });
       return;
     }
 
@@ -141,14 +154,18 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
         imageUris: evidenceImages,
       });
 
-      Alert.alert(
-        'Thành công',
-        `Đã tạo phiếu đề xuất hủy hàng ${created.id.substring(0, 8).toUpperCase()}${
+      showAlert({
+        title: 'Thành công',
+        message: `Đã tạo phiếu đề xuất hủy hàng ${created.id.substring(0, 8).toUpperCase()}${
           evidenceImages.length > 0 ? ` (kèm ${evidenceImages.length} ảnh)` : ''
         }`,
-      );
-      onSuccess(created);
-      onClose();
+        variant: 'success',
+        onConfirm: () => {
+          setAlertState(null);
+          onSuccess(created);
+          onClose();
+        },
+      });
     } catch (err: any) {
       const msg =
         err?.response?.data?.message || err?.message || 'Tạo phiếu hủy hàng thất bại';
@@ -335,6 +352,9 @@ export function CreateScrapModal({ visible, onClose, onSuccess }: CreateScrapMod
           </View>
         </ScrollView>
       </View>
+
+      {/* App UI Alert Modal */}
+      <AppAlertModal {...(alertState || { title: '' })} visible={Boolean(alertState?.visible)} />
     </Modal>
   );
 }

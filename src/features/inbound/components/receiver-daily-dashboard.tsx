@@ -213,10 +213,10 @@ export function ReceiverDailyDashboard() {
           {pendingGrns.map((grn) => (
             <Surface key={grn.id} className="p-4 bg-white border border-[#e4e5e9] rounded-2xl">
               <TouchableOpacity onPress={() => setSelectedGrn(grn)}>
-                <View className="flex-row justify-between items-center mb-1">
-                  <View className="flex-row items-center gap-2">
+                <View className="flex-row justify-between items-center mb-1 gap-2">
+                  <View className="flex-row items-center gap-2 flex-1 mr-2">
                     <ArrowDownLeft size={18} color="#0878f9" />
-                    <Text className="text-sm font-bold text-[#101114]">
+                    <Text className="text-sm font-bold text-[#101114] flex-1" numberOfLines={1} ellipsizeMode="tail">
                       {grn.grnNumber || `GRN #${grn.id.substring(0, 6)}`}
                     </Text>
                   </View>
@@ -225,14 +225,16 @@ export function ReceiverDailyDashboard() {
                     variant={grn.status === 'DRAFT' ? 'neutral' : 'warning'}
                   />
                 </View>
-                <Text className="text-xs text-[#6c7078] mt-1">
+                <Text className="text-xs text-[#6c7078] mt-1" numberOfLines={1} ellipsizeMode="tail">
                   PO: {grn.purchaseOrderNumber || grn.purchaseOrderId || 'N/A'} · {grn.items?.length || 0} mặt hàng
                 </Text>
-                <View className="mt-3 pt-2.5 border-t border-[#f5f6f8] flex-row justify-between items-center">
-                  <Text className="text-xs font-bold text-[#0878f9]">Nhà cung cấp: {grn.supplierName || 'N/A'}</Text>
+                <View className="mt-3 pt-2.5 border-t border-[#f5f6f8] flex-row justify-between items-center gap-2">
+                  <Text className="text-xs font-bold text-[#0878f9] flex-1 mr-2" numberOfLines={1} ellipsizeMode="tail">
+                    Nhà cung cấp: {grn.supplierName || 'N/A'}
+                  </Text>
                   <TouchableOpacity
                     onPress={() => setSelectedGrn(grn)}
-                    className="bg-[#0878f9] px-3.5 py-1.5 rounded-xl"
+                    className="bg-[#0878f9] px-3.5 py-1.5 rounded-xl shrink-0"
                   >
                     <Text className="text-xs font-bold text-white">Xử lý ngay</Text>
                   </TouchableOpacity>
@@ -245,23 +247,25 @@ export function ReceiverDailyDashboard() {
           {pendingPutaways.map((task) => (
             <Surface key={task.id} className="p-4 bg-white border border-[#e4e5e9] rounded-2xl">
               <TouchableOpacity onPress={() => router.push('/putaway')}>
-                <View className="flex-row justify-between items-center mb-1">
-                  <View className="flex-row items-center gap-2">
+                <View className="flex-row justify-between items-center mb-1 gap-2">
+                  <View className="flex-row items-center gap-2 flex-1 mr-2">
                     <Layers size={18} color="#d97706" />
-                    <Text className="text-sm font-bold text-[#101114]">
+                    <Text className="text-sm font-bold text-[#101114] flex-1" numberOfLines={1} ellipsizeMode="tail">
                       Cất hàng GRN #{task.grnNumber || task.grnId.substring(0, 6)}
                     </Text>
                   </View>
                   <StatusBadge label="Đang cất" variant="warning" />
                 </View>
-                <Text className="text-xs text-[#6c7078] mt-1">
+                <Text className="text-xs text-[#6c7078] mt-1" numberOfLines={1} ellipsizeMode="tail">
                   Cần xếp {task.items?.length || 0} sản phẩm vào kệ chứa
                 </Text>
-                <View className="mt-3 pt-2.5 border-t border-[#f5f6f8] flex-row justify-between items-center">
-                  <Text className="text-xs font-bold text-[#d97706]">Trạng thái: Chưa xếp xong</Text>
+                <View className="mt-3 pt-2.5 border-t border-[#f5f6f8] flex-row justify-between items-center gap-2">
+                  <Text className="text-xs font-bold text-[#d97706] flex-1 mr-2" numberOfLines={1} ellipsizeMode="tail">
+                    Trạng thái: Chưa xếp xong
+                  </Text>
                   <TouchableOpacity
                     onPress={() => router.push('/putaway')}
-                    className="bg-[#d97706] px-3.5 py-1.5 rounded-xl"
+                    className="bg-[#d97706] px-3.5 py-1.5 rounded-xl shrink-0"
                   >
                     <Text className="text-xs font-bold text-white">Mở bản đồ cất</Text>
                   </TouchableOpacity>
@@ -274,16 +278,16 @@ export function ReceiverDailyDashboard() {
           {rejectedGrns.map((grn) => (
             <Surface key={grn.id} className="p-4 bg-[#fff5f5] border border-[#fecaca] rounded-2xl">
               <TouchableOpacity onPress={() => setSelectedGrn(grn)}>
-                <View className="flex-row justify-between items-center mb-1">
-                  <View className="flex-row items-center gap-2">
+                <View className="flex-row justify-between items-center mb-1 gap-2">
+                  <View className="flex-row items-center gap-2 flex-1 mr-2">
                     <AlertCircle size={18} color="#dc2626" />
-                    <Text className="text-sm font-bold text-[#991b1b]">
+                    <Text className="text-sm font-bold text-[#991b1b] flex-1" numberOfLines={1} ellipsizeMode="tail">
                       Phiếu từ chối: {grn.grnNumber || grn.id}
                     </Text>
                   </View>
                   <StatusBadge label="Từ chối" variant="danger" />
                 </View>
-                <Text className="text-xs text-[#b91c1c] mt-1">
+                <Text className="text-xs text-[#b91c1c] mt-1" numberOfLines={1} ellipsizeMode="tail">
                   Kiểm tra lại lý do từ chối và sửa lại thông tin
                 </Text>
               </TouchableOpacity>
