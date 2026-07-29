@@ -138,7 +138,7 @@ export function PutawayScreen() {
   return (
     <Screen withTabBar>
       <AppHeader
-        title="Cất Hàng (Putaway)"
+        title="Cất Hàng"
         subtitle="Danh sách sản phẩm cần xếp vào khoang kệ kho"
       />
 
@@ -237,11 +237,11 @@ export function PutawayScreen() {
                     </View>
 
                     <View
-                      className={`px-4 py-2 rounded-xl shadow-sm items-center justify-center self-start ${
+                      className={`px-3 py-2 rounded-xl shadow-sm items-center justify-center shrink-0 ${
                         isDone ? 'bg-[#16a34a]' : 'bg-[#0878f9]'
                       }`}
                     >
-                      <Text className="text-xs font-extrabold text-white text-center">
+                      <Text className="text-xs font-extrabold text-white text-center" numberOfLines={1}>
                         {isDone ? 'Xem vị trí' : 'Mở bản đồ'}
                       </Text>
                     </View>
