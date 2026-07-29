@@ -85,6 +85,84 @@ export interface LayoutPoint {
   yM: number;
 }
 
+export interface MapViewBox {
+  xM: number;
+  yM: number;
+  widthM: number;
+  heightM: number;
+}
+
+export interface MapSizePx {
+  widthPx: number;
+  heightPx: number;
+}
+
+export interface MapPanDeltaPx {
+  dxPx: number;
+  dyPx: number;
+}
+
+const mapPaddingM = 1;
+const minZoom = 1;
+const maxZoom = 3;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function roundLayout(value: number): number {
+  return Number(value.toFixed(4));
+}
+
+export function clampMapZoom(value: number): number {
+  return clamp(Number.isFinite(value) ? value : minZoom, minZoom, maxZoom);
+}
+
+export function getMapViewBox(
+  canvas: WarehouseLayoutCanvas,
+  zoom: number,
+  center: LayoutPoint,
+): MapViewBox {
+  const safeZoom = clampMapZoom(zoom);
+  const fullWidth = canvas.widthM + mapPaddingM * 2;
+  const fullHeight = canvas.heightM + mapPaddingM * 2;
+  const widthM = fullWidth / safeZoom;
+  const heightM = fullHeight / safeZoom;
+  const minX = -mapPaddingM;
+  const minY = -mapPaddingM;
+  const maxX = minX + fullWidth - widthM;
+  const maxY = minY + fullHeight - heightM;
+
+  return {
+    xM: roundLayout(clamp(center.xM - widthM / 2, minX, maxX)),
+    yM: roundLayout(clamp(center.yM - heightM / 2, minY, maxY)),
+    widthM: roundLayout(widthM),
+    heightM: roundLayout(heightM),
+  };
+}
+
+export function panMapCenter(
+  center: LayoutPoint,
+  canvas: WarehouseLayoutCanvas,
+  zoom: number,
+  size: MapSizePx,
+  delta: MapPanDeltaPx,
+): LayoutPoint {
+  const viewBox = getMapViewBox(canvas, zoom, center);
+  const meterPerPixelX = viewBox.widthM / Math.max(1, size.widthPx);
+  const meterPerPixelY = viewBox.heightM / Math.max(1, size.heightPx);
+  const nextCenter = {
+    xM: center.xM - delta.dxPx * meterPerPixelX,
+    yM: center.yM - delta.dyPx * meterPerPixelY,
+  };
+  const clampedViewBox = getMapViewBox(canvas, zoom, nextCenter);
+
+  return {
+    xM: roundLayout(clampedViewBox.xM + clampedViewBox.widthM / 2),
+    yM: roundLayout(clampedViewBox.yM + clampedViewBox.heightM / 2),
+  };
+}
+
 export function getRackRect(rack: WarehouseLayoutRack): LayoutRect {
   const depthM = rack.depthM ?? rack.heightM ?? 2;
   return {
@@ -176,26 +254,75 @@ function accessPoint(value: unknown): LayoutPoint | undefined {
   return Number.isFinite(xM) && Number.isFinite(yM) ? { xM, yM } : undefined;
 }
 
-function normalizeRack(value: unknown, index: number): WarehouseLayoutRack {
+function normalizeRackTemplate(value: unknown): WarehouseLayout["rackTemplate"] {
+  const template = record(value);
+  if (!Object.keys(template).length) return undefined;
+  return {
+    widthM: number(template.widthM, 7),
+    depthM: number(template.depthM, 1.8),
+    heightM: number(template.heightM, 6),
+    levelCount: number(template.levelCount, 0),
+    bayCount: number(template.bayCount, 0),
+  };
+}
+
+function flatAccessPoint(value: Record<string, unknown>): LayoutPoint | undefined {
+  const xM = number(value.accessPointXM, NaN);
+  const yM = number(value.accessPointYM, NaN);
+  return Number.isFinite(xM) && Number.isFinite(yM) ? { xM, yM } : undefined;
+}
+
+function shelfCodesForRack(shelves: unknown[], rackId: string): string[] | undefined {
+  const codes = shelves
+    .map((shelf) => record(shelf))
+    .filter((shelf) => shelf.rackId === rackId && typeof shelf.code === "string")
+    .sort((left, right) => number(left.level, 0) - number(right.level, 0))
+    .map((shelf) => shelf.code as string);
+
+  return codes.length > 0 ? codes : undefined;
+}
+
+function normalizeRack(
+  value: unknown,
+  index: number,
+  template: WarehouseLayout["rackTemplate"],
+  shelves: unknown[],
+): WarehouseLayoutRack {
   const rack = record(value);
   const code = string(rack.code, `RACK-${String(index + 1).padStart(2, "0")}`);
-  const normalizedAccessPoint = accessPoint(rack.accessPoint);
+  const id = string(rack.id, code);
+  const normalizedAccessPoint = accessPoint(rack.accessPoint) ?? flatAccessPoint(rack);
 
   return {
-    id: string(rack.id, code),
+    id,
     zoneId: typeof rack.zoneId === "string" ? rack.zoneId : undefined,
     code,
     name: typeof rack.name === "string" ? rack.name : undefined,
     xM: number(rack.xM, 0),
     yM: number(rack.yM, 0),
-    widthM: number(rack.widthM, 2),
-    depthM: rack.depthM == null ? undefined : number(rack.depthM, 2),
-    heightM: rack.heightM == null ? undefined : number(rack.heightM, 2),
+    widthM: number(rack.widthM, template?.widthM ?? 2),
+    depthM: rack.depthM == null ? template?.depthM : number(rack.depthM, template?.depthM ?? 2),
+    heightM: rack.heightM == null ? template?.heightM : number(rack.heightM, template?.heightM ?? 2),
     rotation: rotation(rack.rotation),
-    levelCount: rack.levelCount == null ? undefined : number(rack.levelCount, 0),
-    bayCount: rack.bayCount == null ? undefined : number(rack.bayCount, 0),
-    shelfCodes: Array.isArray(rack.shelfCodes) ? rack.shelfCodes.filter((item): item is string => typeof item === "string") : undefined,
+    levelCount: rack.levelCount == null ? template?.levelCount : number(rack.levelCount, template?.levelCount ?? 0),
+    bayCount: rack.bayCount == null ? template?.bayCount : number(rack.bayCount, template?.bayCount ?? 0),
+    shelfCodes: Array.isArray(rack.shelfCodes) ? rack.shelfCodes.filter((item): item is string => typeof item === "string") : shelfCodesForRack(shelves, id),
     accessPoint: normalizedAccessPoint,
+  };
+}
+
+function normalizeZone(value: unknown, index: number): WarehouseLayoutZone {
+  const zone = record(value);
+  const code = string(zone.code, `ZONE-${String(index + 1).padStart(2, "0")}`);
+  return {
+    id: string(zone.id, code),
+    code,
+    name: string(zone.name, code),
+    xM: number(zone.xM, 0),
+    yM: number(zone.yM, 0),
+    widthM: number(zone.widthM, 1),
+    heightM: number(zone.heightM, 1),
+    rotation: rotation(zone.rotation),
   };
 }
 
@@ -240,6 +367,8 @@ export function normalizeWarehouseLayout(payload: unknown): WarehouseLayout {
   }
 
   const canvas = record(source.canvas);
+  const rackTemplate = normalizeRackTemplate(source.rackTemplate);
+  const shelves = array(source.shelves);
   return {
     id: typeof source.id === "string" ? source.id : undefined,
     revision: typeof source.revision === "number" ? source.revision : undefined,
@@ -252,13 +381,10 @@ export function normalizeWarehouseLayout(payload: unknown): WarehouseLayout {
       heightM: number(canvas.heightM, 24),
       gridM: number(canvas.gridM, 1),
     },
-    rackTemplate:
-      source.rackTemplate && typeof source.rackTemplate === "object"
-        ? (source.rackTemplate as WarehouseLayout["rackTemplate"])
-        : undefined,
-    zones: array<WarehouseLayoutZone>(source.zones),
-    racks: array(source.racks).map(normalizeRack),
-    shelves: array(source.shelves),
+    rackTemplate,
+    zones: array(source.zones).map(normalizeZone),
+    racks: array(source.racks).map((rack, index) => normalizeRack(rack, index, rackTemplate, shelves)),
+    shelves,
     aisles: array(source.aisles).map(normalizeAisle),
     gates: array(source.gates).map(normalizeGate),
     updatedAt:

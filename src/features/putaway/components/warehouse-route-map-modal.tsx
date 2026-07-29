@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, PanResponder, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Defs, G, Path, Pattern, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { Maximize2, Minus, Navigation, Plus, X } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
 import { fetchWarehouseLayout, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
 import type { NavigationPath } from '../types/putaway';
-import { buildRackRoutePoints, calculateRouteDistance, getRackRect, isFiniteLayoutPoint } from '../utils/warehouse-layout';
+import { buildRackRoutePoints, calculateRouteDistance, clampMapZoom, getMapViewBox, getRackRect, isFiniteLayoutPoint, panMapCenter, type LayoutPoint } from '../utils/warehouse-layout';
 import { RackCellViewerModal } from './rack-cell-viewer-modal';
 
 export interface WarehouseRouteMapModalProps {
@@ -238,6 +238,10 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
   const [loading, setLoading] = useState(false);
   const [rackViewerOpen, setRackViewerOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [mapCenter, setMapCenter] = useState<LayoutPoint>({ xM: layoutCanvas.widthM / 2, yM: layoutCanvas.heightM / 2 });
+  const [mapSize, setMapSize] = useState({ widthPx: 1, heightPx: 390 });
+  const lastPanRef = useRef({ x: 0, y: 0 });
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -262,32 +266,40 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
     }
   }, [visible, targetLocation]);
 
-  if (!visible) return null;
-
   const racks = layout.racks;
   const canvas = layout.canvas;
   const gates = layout.gates.length > 0 ? layout.gates : [defaultGate];
   const startGate = gates.find((gate) => gate.code === path?.startGateCode) ?? gates[0];
   const selectedPathMatches = selectedRack ? path?.targetRackId === selectedRack.id || path?.targetRackId === selectedRack.code : false;
   const apiPoints = selectedPathMatches && path?.points?.length && path.points.every(isFiniteLayoutPoint) ? path.points : null;
-  const points = apiPoints ?? (selectedRack ? buildRackRoutePoints(startGate, selectedRack) : []);
+  const points = useMemo(
+    () => apiPoints ?? (selectedRack ? buildRackRoutePoints(startGate, selectedRack) : []),
+    [apiPoints, selectedRack, startGate],
+  );
 
   const routePolylinePoints = points.map((p) => `${p.xM},${p.yM}`).join(' ');
   const distance = selectedPathMatches && path?.distanceM ? path.distanceM : calculateRouteDistance(points);
   const gateCode = path?.startGateCode ?? startGate.code;
   const currentRackCode = selectedRack?.code || 'RACK-02';
-  const viewBoxWidth = (canvas.widthM + 2) / zoomLevel;
-  const viewBoxHeight = (canvas.heightM + 2) / zoomLevel;
-  const routeCenter =
-    points.length > 0
-      ? {
-          xM: points.reduce((total, point) => total + point.xM, 0) / points.length,
-          yM: points.reduce((total, point) => total + point.yM, 0) / points.length,
-        }
-      : { xM: canvas.widthM / 2, yM: canvas.heightM / 2 };
-  const viewBoxX = Math.max(-1, Math.min(canvas.widthM + 1 - viewBoxWidth, routeCenter.xM - viewBoxWidth / 2));
-  const viewBoxY = Math.max(-1, Math.min(canvas.heightM + 1 - viewBoxHeight, routeCenter.yM - viewBoxHeight / 2));
-  const viewBox = `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`;
+  const routeCenter = useMemo(
+    () =>
+      points.length > 0
+        ? {
+            xM: points.reduce((total, point) => total + point.xM, 0) / points.length,
+            yM: points.reduce((total, point) => total + point.yM, 0) / points.length,
+          }
+        : { xM: canvas.widthM / 2, yM: canvas.heightM / 2 },
+    [canvas.heightM, canvas.widthM, points],
+  );
+  const mapViewBox = getMapViewBox(canvas, zoomLevel, mapCenter);
+  const viewBox = `${mapViewBox.xM} ${mapViewBox.yM} ${mapViewBox.widthM} ${mapViewBox.heightM}`;
+
+  useEffect(() => {
+    if (visible) {
+      setMapCenter(routeCenter);
+      setZoomLevel(1);
+    }
+  }, [visible, selectedRack?.id, selectedRack?.code, routeCenter]);
 
   const handleRackPress = (rack: WarehouseLayoutRack) => {
     setSelectedRack(rack);
@@ -297,9 +309,58 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
     setRackViewerOpen(true);
   };
 
-  const handleZoomIn = () => setZoomLevel((value) => Math.min(2.5, Number((value + 0.25).toFixed(2))));
-  const handleZoomOut = () => setZoomLevel((value) => Math.max(1, Number((value - 0.25).toFixed(2))));
-  const handleResetZoom = () => setZoomLevel(1);
+  const handleZoomIn = () => setZoomLevel((value) => clampMapZoom(Number((value + 0.25).toFixed(2))));
+  const handleZoomOut = () => setZoomLevel((value) => clampMapZoom(Number((value - 0.25).toFixed(2))));
+  const handleResetZoom = () => {
+    setZoomLevel(1);
+    setMapCenter(routeCenter);
+  };
+
+  const mapPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: (event) => event.nativeEvent.touches.length >= 2,
+        onMoveShouldSetPanResponder: (event, gestureState) => event.nativeEvent.touches.length >= 2 || Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2,
+        onPanResponderGrant: (event) => {
+          lastPanRef.current = { x: 0, y: 0 };
+          const touches = event.nativeEvent.touches;
+          pinchRef.current =
+            touches.length >= 2
+              ? {
+                  distance: Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY),
+                  zoom: zoomLevel,
+                }
+              : null;
+        },
+        onPanResponderMove: (event, gestureState) => {
+          const touches = event.nativeEvent.touches;
+          if (touches.length >= 2) {
+            const pinch = pinchRef.current;
+            const nextDistance = Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY);
+            if (pinch && pinch.distance > 0) {
+              setZoomLevel(clampMapZoom(Number((pinch.zoom * (nextDistance / pinch.distance)).toFixed(2))));
+            }
+            return;
+          }
+
+          const dxPx = gestureState.dx - lastPanRef.current.x;
+          const dyPx = gestureState.dy - lastPanRef.current.y;
+          lastPanRef.current = { x: gestureState.dx, y: gestureState.dy };
+          setMapCenter((center) => panMapCenter(center, canvas, zoomLevel, mapSize, { dxPx, dyPx }));
+        },
+        onPanResponderRelease: () => {
+          pinchRef.current = null;
+          lastPanRef.current = { x: 0, y: 0 };
+        },
+        onPanResponderTerminate: () => {
+          pinchRef.current = null;
+          lastPanRef.current = { x: 0, y: 0 };
+        },
+      }),
+    [canvas, mapSize, zoomLevel],
+  );
+
+  if (!visible) return null;
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -333,7 +394,14 @@ export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation 
                 <Text className="text-xs text-[#64748b] mt-2">Đang tải sơ đồ kho từ máy chủ backend...</Text>
               </View>
             ) : (
-              <View className="w-full">
+              <View
+                className="w-full"
+                onLayout={(event) => {
+                  const { width, height } = event.nativeEvent.layout;
+                  setMapSize({ widthPx: Math.max(1, width), heightPx: Math.max(1, height) });
+                }}
+                {...mapPanResponder.panHandlers}
+              >
                 <View className="absolute right-2 top-2 z-10 flex-row bg-white/95 rounded-xl border border-[#cbd5e1] overflow-hidden">
                   <TouchableOpacity onPress={handleZoomOut} className="p-2 border-r border-[#e2e8f0]" accessibilityLabel="Thu nhỏ bản đồ">
                     <Minus size={15} color="#334155" />

@@ -1,8 +1,10 @@
 import {
   buildRackRoutePoints,
   getRackAccessPoint,
+  getMapViewBox,
   getRackRect,
   normalizeWarehouseLayout,
+  panMapCenter,
 } from "./warehouse-layout";
 
 describe("warehouse layout normalization", () => {
@@ -175,12 +177,14 @@ describe("warehouse layout normalization", () => {
             accessPoint: { xM: "27.5", yM: undefined },
           },
         ],
+        zones: [{ id: "zone-01", code: "ZONE-01", xM: "0", yM: "0", widthM: "55", heightM: "24", rotation: "0" }],
         aisles: [],
         gates: [{ id: "gate-01", code: "GATE-01", xM: "24", yM: "25" }],
       },
     });
 
     expect(layout.canvas).toEqual({ widthM: 55, heightM: 24, gridM: 0.5 });
+    expect(layout.zones[0]).toMatchObject({ xM: 0, yM: 0, widthM: 55, heightM: 24, rotation: 0 });
     expect(getRackRect(layout.racks[0])).toEqual({
       xM: 27.5,
       yM: 12.5,
@@ -189,5 +193,77 @@ describe("warehouse layout normalization", () => {
     });
     expect(layout.racks[0].accessPoint).toBeUndefined();
     expect(layout.gates[0]).toMatchObject({ xM: 24, yM: 25 });
+  });
+
+  it("applies rack template dimensions and flat access point fields from the API", () => {
+    const layout = normalizeWarehouseLayout({
+      data: {
+        canvas: { widthM: 55, heightM: 24, gridM: 1 },
+        rackTemplate: {
+          widthM: 7,
+          depthM: 1.8,
+          heightM: 6,
+          levelCount: 3,
+          bayCount: 4,
+        },
+        zones: [],
+        racks: [
+          {
+            id: "rack-10",
+            code: "RACK-10",
+            xM: 27.5,
+            yM: 12.5,
+            rotation: 90,
+            accessPointXM: 27.5,
+            accessPointYM: 12.5,
+          },
+        ],
+        shelves: [{ rackId: "rack-10", level: 2, code: "RACK-10-T2" }],
+        aisles: [],
+        gates: [],
+      },
+    });
+
+    expect(layout.racks[0]).toMatchObject({
+      widthM: 7,
+      depthM: 1.8,
+      levelCount: 3,
+      bayCount: 4,
+      shelfCodes: ["RACK-10-T2"],
+      accessPoint: { xM: 27.5, yM: 12.5 },
+    });
+    expect(getRackRect(layout.racks[0])).toEqual({
+      xM: 27.5,
+      yM: 12.5,
+      widthM: 1.8,
+      heightM: 7,
+    });
+  });
+
+  it("keeps map viewbox inside the warehouse canvas while zoomed", () => {
+    expect(
+      getMapViewBox(
+        { widthM: 55, heightM: 24, gridM: 1 },
+        2,
+        { xM: 54, yM: 23 },
+      ),
+    ).toEqual({
+      xM: 27.5,
+      yM: 12,
+      widthM: 28.5,
+      heightM: 13,
+    });
+  });
+
+  it("pans the map center using screen drag distance", () => {
+    expect(
+      panMapCenter(
+        { xM: 27.5, yM: 12 },
+        { widthM: 55, heightM: 24, gridM: 1 },
+        2,
+        { widthPx: 300, heightPx: 390 },
+        { dxPx: 30, dyPx: -39 },
+      ),
+    ).toEqual({ xM: 24.65, yM: 13.3 });
   });
 });
