@@ -1,10 +1,47 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Package } from 'lucide-react-native';
+import { ENV } from '@/shared/config/env';
 import { colors } from '@/shared/theme/tokens';
 import { AppHeader, EmptyState, ListRow, Screen, SearchField, Surface } from '@/shared/ui';
 import { listProducts, type WarehouseItem } from '../api/products-api';
 import { ProductDetailModal } from '../components/product-detail-modal';
+
+function resolveImageUrl(uri?: string): string {
+  if (!uri) return '';
+  if (
+    uri.startsWith('http://') ||
+    uri.startsWith('https://') ||
+    uri.startsWith('file://') ||
+    uri.startsWith('data:')
+  ) {
+    return uri;
+  }
+  const baseUrl = ENV.API_URL.replace(/\/api.*$/, '');
+  const cleanPath = uri.startsWith('/') ? uri : `/${uri}`;
+  return `${baseUrl}${cleanPath}`;
+}
+
+function ProductAvatar({ item }: { item: WarehouseItem }) {
+  const firstImage = item.images && item.images.length > 0 ? item.images[0] : (item as any).imageUrl || (item as any).image;
+  const imageUri = resolveImageUrl(firstImage);
+
+  if (imageUri) {
+    return (
+      <Image
+        source={{ uri: imageUri }}
+        className="w-11 h-11 rounded-xl"
+        resizeMode="cover"
+      />
+    );
+  }
+
+  return (
+    <View className="w-11 h-11 rounded-xl bg-[#f1f5f9] items-center justify-center border border-[#e2e8f0]">
+      <Package size={20} color="#94a3b8" />
+    </View>
+  );
+}
 
 export function ProductsScreen() {
   const [items, setItems] = useState<WarehouseItem[]>([]);
@@ -70,7 +107,7 @@ export function ProductsScreen() {
                   activeOpacity={0.7}
                 >
                   <ListRow
-                    icon={<Package size={19} color={colors.primary} />}
+                    icon={<ProductAvatar item={item} />}
                     title={item.name || item.sku}
                     subtitle={`${item.sku} · ${item.location || 'Kho chính'}`}
                     meta={`${qty.toLocaleString('vi-VN')} ${item.unit || 'Cái'}`}

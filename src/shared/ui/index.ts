@@ -8,3 +8,4 @@ export * from './search-field';
 export * from './skeleton';
 export * from './status-badge';
 export * from './surface';
+export * from './quick-menu-modal';

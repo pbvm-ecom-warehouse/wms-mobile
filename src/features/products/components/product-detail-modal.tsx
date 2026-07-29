@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Barcode, MapPin, ShieldAlert, X } from 'lucide-react-native';
+import { MapPin, Package, ShieldAlert, X } from 'lucide-react-native';
 import { ENV } from '@/shared/config/env';
 import { colors } from '@/shared/theme/tokens';
 import { getProductDetail, type WarehouseItem } from '../api/products-api';
@@ -45,7 +45,29 @@ export function ProductDetailModal({ visible, item, onClose }: ProductDetailModa
       getProductDetail(item.id)
         .then((fresh) => {
           if (fresh) {
-            setDetailItem((prev) => ({ ...prev, ...fresh }));
+            setDetailItem((prev) => {
+              if (!prev) return fresh;
+              const onHand =
+                fresh.quantityOnHand && fresh.quantityOnHand > 0
+                  ? fresh.quantityOnHand
+                  : prev.quantityOnHand ?? fresh.quantityOnHand ?? 0;
+              const available =
+                fresh.availableQty && fresh.availableQty > 0
+                  ? fresh.availableQty
+                  : prev.availableQty ?? fresh.availableQty ?? 0;
+              const location =
+                fresh.location && fresh.location !== 'Kho chính'
+                  ? fresh.location
+                  : prev.location || fresh.location || 'Kho chính';
+
+              return {
+                ...prev,
+                ...fresh,
+                quantityOnHand: onHand,
+                availableQty: available,
+                location: location,
+              };
+            });
           }
         })
         .catch((err: any) => {
@@ -57,7 +79,7 @@ export function ProductDetailModal({ visible, item, onClose }: ProductDetailModa
     } else {
       setDetailItem(null);
     }
-  }, [visible, item?.id]);
+  }, [visible, item]);
 
   const activeItem = detailItem || item;
   if (!activeItem) return null;
@@ -65,6 +87,7 @@ export function ProductDetailModal({ visible, item, onClose }: ProductDetailModa
   const onHand = activeItem.quantityOnHand ?? 0;
   const available = activeItem.availableQty ?? onHand;
   const allocated = activeItem.allocatedQty ?? 0;
+  const mainImage = activeItem.images && activeItem.images.length > 0 ? activeItem.images[0] : (activeItem as any).imageUrl || (activeItem as any).image;
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -94,6 +117,22 @@ export function ProductDetailModal({ visible, item, onClose }: ProductDetailModa
         ) : null}
 
         <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
+          {/* Product Main Image / Placeholder Banner */}
+          <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3 items-center justify-center">
+            {mainImage ? (
+              <Image
+                source={{ uri: resolveImageUrl(mainImage) }}
+                className="w-32 h-32 rounded-2xl"
+                resizeMode="cover"
+              />
+            ) : (
+              <View className="w-32 h-32 rounded-2xl bg-[#f1f5f9] items-center justify-center border border-[#e2e8f0]">
+                <Package size={40} color="#94a3b8" />
+                <Text className="text-[11px] text-[#94a3b8] mt-2 font-semibold">Chưa có hình ảnh</Text>
+              </View>
+            )}
+          </View>
+
           {/* Main Info Card */}
           <View className="bg-white p-4 rounded-2xl border border-[#e4e5e9] mb-3">
             <Text className="text-xs font-bold text-[#6c7078] uppercase mb-2">
@@ -113,10 +152,7 @@ export function ProductDetailModal({ visible, item, onClose }: ProductDetailModa
             {activeItem.barcode ? (
               <View className="flex-row justify-between items-center py-2 border-b border-[#f5f6f8]">
                 <Text className="text-xs text-[#6c7078]">Mã vạch (Barcode)</Text>
-                <View className="flex-row items-center gap-1.5">
-                  <Barcode size={14} color="#6c7078" />
-                  <Text className="text-xs font-bold text-[#101114]">{activeItem.barcode}</Text>
-                </View>
+                <Text className="text-xs font-bold text-[#101114]">{activeItem.barcode}</Text>
               </View>
             ) : null}
 

@@ -7,6 +7,7 @@ import {
   Box,
   CircleHelp,
   Clock3,
+  Menu as MenuIcon,
   PackageCheck,
   Printer,
   QrCode,
@@ -22,7 +23,9 @@ import { listProducts } from '@/features/products/api/products-api';
 import { listPrintJobs } from '@/features/printing/api/printing-api';
 import { listShipments } from '@/features/shipping/api/shipping-api';
 import { colors } from '@/shared/theme/tokens';
-import { IconButton, ListRow, Screen, Surface } from '@/shared/ui';
+import { ReceiverDailyDashboard } from '@/features/inbound/components/receiver-daily-dashboard';
+import { WmsRole } from '@/shared/types/auth';
+import { IconButton, ListRow, QuickMenuModal, Screen, Surface } from '@/shared/ui';
 
 type Period = 'Hôm nay' | 'Tuần này';
 
@@ -36,6 +39,8 @@ export function DashboardScreen() {
   const [issueCount, setIssueCount] = useState<number>(0);
   const [printCount, setPrintCount] = useState<number>(0);
   const [shipCount, setShipCount] = useState<number>(0);
+
+  const isReceiver = user?.role?.toUpperCase() === WmsRole.RECEIVER;
 
   const loadStats = useCallback(async () => {
     try {
@@ -63,36 +68,48 @@ export function DashboardScreen() {
     }
   }, []);
 
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
+
   useEffect(() => {
-    loadStats();
-  }, [loadStats]);
+    if (!isReceiver) {
+      loadStats();
+    }
+  }, [loadStats, isReceiver]);
+
+  if (isReceiver) {
+    return (
+      <Screen withTabBar>
+        <ReceiverDailyDashboard />
+      </Screen>
+    );
+  }
 
   return (
     <Screen withTabBar>
       <View className="mb-5 flex-row items-center justify-between">
         <IconButton
-          accessibilityLabel="Mở tài khoản"
-          icon={<UserRound size={20} color={colors.text} />}
-          onPress={() => router.push('/profile')}
+          accessibilityLabel="Mở menu 3 gạch"
+          icon={<MenuIcon size={20} color={colors.primary} />}
+          onPress={() => setShowQuickMenu(true)}
         />
-        <View className="items-center">
+        <View className="flex-row items-center gap-2">
           <View className="h-9 w-9 items-center justify-center rounded-2xl bg-primary-soft">
-            <Box size={22} color={colors.primary} strokeWidth={2.3} />
+            <Box size={20} color={colors.primary} strokeWidth={2.3} />
           </View>
-          <Text className="mt-1 text-[10px] font-semibold text-muted">StockMate</Text>
+          <View className="items-start">
+            <Text className="text-base font-extrabold text-[#101114]">Stock Mate</Text>
+          </View>
         </View>
         <View className="flex-row gap-2">
-          <IconButton
-            accessibilityLabel="Thông báo (sắp có)"
-            disabled
-            notification
-            icon={<Bell size={19} color={colors.text} />}
-            onPress={() => undefined}
-          />
           <IconButton
             accessibilityLabel="Tìm kiếm"
             icon={<Search size={20} color={colors.text} />}
             onPress={() => router.push('/products')}
+          />
+          <IconButton
+            accessibilityLabel="Mở tài khoản"
+            icon={<UserRound size={20} color={colors.text} />}
+            onPress={() => router.push('/profile')}
           />
         </View>
       </View>
@@ -189,6 +206,11 @@ export function DashboardScreen() {
           {user?.name || 'Nhân viên kho'} · Hệ thống hoạt động tốt
         </Text>
       </View>
+
+      <QuickMenuModal
+        visible={showQuickMenu}
+        onClose={() => setShowQuickMenu(false)}
+      />
     </Screen>
   );
 }
