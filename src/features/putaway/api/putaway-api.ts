@@ -1,12 +1,8 @@
 import { apiClient, cachedGet, unwrapData } from '@/shared/lib/api-client';
-import type {
-  ConfirmPutawayLineInput,
-  NavigationPath,
-  PutawaySuggestionInput,
-  PutawaySuggestionResponse,
-  PutawayTask,
-  QueryPutawayTasksInput,
-} from '../types/putaway';
+import type { ConfirmPutawayLineInput, NavigationPath, PutawaySuggestionInput, PutawaySuggestionResponse, PutawayTask, QueryPutawayTasksInput } from '../types/putaway';
+import { normalizeWarehouseLayout, type WarehouseLayout } from '../utils/warehouse-layout';
+
+export type { WarehouseLayout, WarehouseLayoutAisle, WarehouseLayoutCanvas, WarehouseLayoutGate, WarehouseLayoutRack, WarehouseLayoutZone } from '../utils/warehouse-layout';
 
 interface ApiListLike<T> {
   data?: T[];
@@ -24,6 +20,10 @@ export type StorageCellContent = {
   quantity: number;
   lotNumber?: string | null;
   expiryDate?: string | null;
+  packageWidthCm?: number | null;
+  packageHeightCm?: number | null;
+  packageDepthCm?: number | null;
+  packageVolumeCm3Snapshot?: number | null;
 };
 
 export type StorageCellView = {
@@ -35,50 +35,26 @@ export type StorageCellView = {
   code: string;
   barcode?: string;
   status: 'ACTIVE' | 'BLOCKED';
+  innerWidth?: number;
+  innerHeight?: number;
+  innerDepth?: number;
   usableVolumeCm3?: number;
   occupiedVolumeCm3?: number;
   fillPercent: number;
   contents: StorageCellContent[];
 };
 
-export interface WarehouseLayoutRack {
-  id: string;
-  code: string;
-  name?: string;
-  zoneId?: string;
-  xM?: number;
-  yM?: number;
-  widthM?: number;
-  heightM?: number;
-  depthM?: number;
-  totalCells?: number;
-  fillPercent?: number;
-}
-
-export interface WarehouseLayoutGate {
-  id: string;
-  code: string;
-  name?: string;
-  xM?: number;
-  yM?: number;
-}
-
-export interface WarehouseLayout {
-  racks: WarehouseLayoutRack[];
-  gates?: WarehouseLayoutGate[];
-  zones?: any[];
-}
-
-let putawayTasksCache: { data: PutawayTask[]; timestamp: number; key: string } | null = null;
+let putawayTasksCache: {
+  data: PutawayTask[];
+  timestamp: number;
+  key: string;
+} | null = null;
 
 export function invalidatePutawayCache() {
   putawayTasksCache = null;
 }
 
-export async function listPutawayTasks(
-  input: QueryPutawayTasksInput = {},
-  forceRefresh = false,
-): Promise<PutawayTask[]> {
+export async function listPutawayTasks(input: QueryPutawayTasksInput = {}, forceRefresh = false): Promise<PutawayTask[]> {
   const cacheKey = JSON.stringify(input);
   if (!forceRefresh && putawayTasksCache && putawayTasksCache.key === cacheKey && Date.now() - putawayTasksCache.timestamp < 30000) {
     return putawayTasksCache.data;
@@ -111,10 +87,7 @@ export async function getPutawayTask(id: string): Promise<PutawayTask> {
   return unwrapData<PutawayTask>(response.data);
 }
 
-export async function confirmPutawayLine(
-  taskId: string,
-  input: ConfirmPutawayLineInput,
-): Promise<PutawayTask> {
+export async function confirmPutawayLine(taskId: string, input: ConfirmPutawayLineInput): Promise<PutawayTask> {
   invalidatePutawayCache();
   const payload: any = {
     itemBarcode: input.itemBarcode,
@@ -125,16 +98,11 @@ export async function confirmPutawayLine(
   if (input.suggestedCellId) payload.suggestedCellId = input.suggestedCellId;
   if (input.lotId) payload.lotId = input.lotId;
 
-  const response = await apiClient.post<PutawayTask>(
-    `/putaway-tasks/${encodeURIComponent(taskId)}/confirm-line`,
-    payload,
-  );
+  const response = await apiClient.post<PutawayTask>(`/putaway-tasks/${encodeURIComponent(taskId)}/confirm-line`, payload);
   return unwrapData<PutawayTask>(response.data);
 }
 
-export async function getPutawaySuggestions(
-  input: PutawaySuggestionInput,
-): Promise<PutawaySuggestionResponse> {
+export async function getPutawaySuggestions(input: PutawaySuggestionInput): Promise<PutawaySuggestionResponse> {
   const cleanSku = (input.sku || '').trim();
   if (!cleanSku) {
     return { suggestions: [], warning: 'ITEM_NO_DIMENSIONS' };
@@ -174,26 +142,18 @@ export async function getPutawaySuggestions(
 
 export async function fetchWarehouseLayout(): Promise<WarehouseLayout> {
   try {
-    const response = await cachedGet<any>('/location/layout');
-    const payload = unwrapData<any>(response.data);
-    const layoutData = payload?.data || payload;
-    return {
-      racks: Array.isArray(layoutData?.racks) ? layoutData.racks : [],
-      gates: Array.isArray(layoutData?.gates) ? layoutData.gates : [],
-      zones: Array.isArray(layoutData?.zones) ? layoutData.zones : [],
-    };
+    const response = await cachedGet<unknown>('/location/layout');
+    return normalizeWarehouseLayout(response.data);
   } catch (err) {
     console.warn('Lỗi tải sơ đồ /location/layout từ backend:', err);
-    return { racks: [], gates: [], zones: [] };
+    return normalizeWarehouseLayout({});
   }
 }
 
 export async function listRackCells(rackId: string): Promise<StorageCellView[]> {
   if (!rackId) return [];
   try {
-    const response = await cachedGet<any>(
-      `/location/racks/${encodeURIComponent(rackId)}/cells`,
-    );
+    const response = await cachedGet<any>(`/location/racks/${encodeURIComponent(rackId)}/cells`);
     const payload = unwrapData<any>(response.data);
     const list = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
     return list;

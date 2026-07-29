@@ -1,14 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
-import { MapPin, Navigation, X } from 'lucide-react-native';
+import Svg, { Circle, Defs, G, Path, Pattern, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import { Navigation, X } from 'lucide-react-native';
 import { colors } from '@/shared/theme/tokens';
-import {
-  fetchWarehouseLayout,
-  type WarehouseLayoutGate,
-  type WarehouseLayoutRack,
-} from '../api/putaway-api';
+import { fetchWarehouseLayout, type WarehouseLayout, type WarehouseLayoutGate, type WarehouseLayoutRack } from '../api/putaway-api';
 import type { NavigationPath } from '../types/putaway';
+import { getRackRect } from '../utils/warehouse-layout';
 import { RackCellViewerModal } from './rack-cell-viewer-modal';
 
 export interface WarehouseRouteMapModalProps {
@@ -32,52 +29,212 @@ const webStandardRacks: WarehouseLayoutRack[] = [
   { id: 'rack-09', code: 'RACK-09', xM: 28.5, yM: 2, widthM: 7, heightM: 1.8 },
 
   { id: 'rack-18', code: 'RACK-18', xM: 1.5, yM: 4.8, widthM: 7, heightM: 1.8 },
-  { id: 'rack-15', code: 'RACK-15', xM: 10.5, yM: 4.8, widthM: 7, heightM: 1.8 },
-  { id: 'rack-10', code: 'RACK-10', xM: 19.5, yM: 4.8, widthM: 7, heightM: 1.8 },
-  { id: 'rack-11', code: 'RACK-11', xM: 28.5, yM: 4.8, widthM: 7, heightM: 1.8 },
+  {
+    id: 'rack-15',
+    code: 'RACK-15',
+    xM: 10.5,
+    yM: 4.8,
+    widthM: 7,
+    heightM: 1.8,
+  },
+  {
+    id: 'rack-10',
+    code: 'RACK-10',
+    xM: 19.5,
+    yM: 4.8,
+    widthM: 7,
+    heightM: 1.8,
+  },
+  {
+    id: 'rack-11',
+    code: 'RACK-11',
+    xM: 28.5,
+    yM: 4.8,
+    widthM: 7,
+    heightM: 1.8,
+  },
 
   { id: 'rack-19', code: 'RACK-19', xM: 1.5, yM: 7.6, widthM: 7, heightM: 1.8 },
-  { id: 'rack-16', code: 'RACK-16', xM: 10.5, yM: 7.6, widthM: 7, heightM: 1.8 },
-  { id: 'rack-12', code: 'RACK-12', xM: 19.5, yM: 7.6, widthM: 7, heightM: 1.8 },
-  { id: 'rack-13', code: 'RACK-13', xM: 28.5, yM: 7.6, widthM: 7, heightM: 1.8 },
+  {
+    id: 'rack-16',
+    code: 'RACK-16',
+    xM: 10.5,
+    yM: 7.6,
+    widthM: 7,
+    heightM: 1.8,
+  },
+  {
+    id: 'rack-12',
+    code: 'RACK-12',
+    xM: 19.5,
+    yM: 7.6,
+    widthM: 7,
+    heightM: 1.8,
+  },
+  {
+    id: 'rack-13',
+    code: 'RACK-13',
+    xM: 28.5,
+    yM: 7.6,
+    widthM: 7,
+    heightM: 1.8,
+  },
 
   // Bottom-Left Section (Vertical)
-  { id: 'rack-20', code: 'RACK-20', xM: 1.2, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-21', code: 'RACK-21', xM: 3.6, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-22', code: 'RACK-22', xM: 6.0, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-23', code: 'RACK-23', xM: 8.4, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-24', code: 'RACK-24', xM: 10.8, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-25', code: 'RACK-25', xM: 13.2, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-26', code: 'RACK-26', xM: 15.6, yM: 14, widthM: 1.8, heightM: 8.5 },
+  {
+    id: 'rack-20',
+    code: 'RACK-20',
+    xM: 1.2,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-21',
+    code: 'RACK-21',
+    xM: 3.6,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-22',
+    code: 'RACK-22',
+    xM: 6.0,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-23',
+    code: 'RACK-23',
+    xM: 8.4,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-24',
+    code: 'RACK-24',
+    xM: 10.8,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-25',
+    code: 'RACK-25',
+    xM: 13.2,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-26',
+    code: 'RACK-26',
+    xM: 15.6,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
 
   // Bottom-Right Section (Vertical)
-  { id: 'rack-01', code: 'RACK-01', xM: 21.0, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-02', code: 'RACK-02', xM: 23.4, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-03', code: 'RACK-03', xM: 25.8, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-04', code: 'RACK-04', xM: 28.2, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-05', code: 'RACK-05', xM: 30.6, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-06', code: 'RACK-06', xM: 33.0, yM: 14, widthM: 1.8, heightM: 8.5 },
-  { id: 'rack-07', code: 'RACK-07', xM: 35.4, yM: 14, widthM: 1.8, heightM: 8.5 },
+  {
+    id: 'rack-01',
+    code: 'RACK-01',
+    xM: 21.0,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-02',
+    code: 'RACK-02',
+    xM: 23.4,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-03',
+    code: 'RACK-03',
+    xM: 25.8,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-04',
+    code: 'RACK-04',
+    xM: 28.2,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-05',
+    code: 'RACK-05',
+    xM: 30.6,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-06',
+    code: 'RACK-06',
+    xM: 33.0,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
+  {
+    id: 'rack-07',
+    code: 'RACK-07',
+    xM: 35.4,
+    yM: 14,
+    widthM: 1.8,
+    heightM: 8.5,
+  },
 ];
 
 const webStandardAisles = [
   { code: 'AISLE-02', xM: 0, yM: 10.5, widthM: 36, heightM: 2.2, isMain: true },
-  { code: 'AISLE-01', xM: 17.6, yM: 12.7, widthM: 1.6, heightM: 10.8, isMain: false },
+  {
+    code: 'AISLE-01',
+    xM: 17.6,
+    yM: 12.7,
+    widthM: 1.6,
+    heightM: 10.8,
+    isMain: false,
+  },
 ];
 
-const defaultGate: WarehouseLayoutGate = { id: 'gate-01', code: 'GATE-01', xM: 18.4, yM: 23.5 };
+const defaultGate: WarehouseLayoutGate = {
+  id: 'gate-01',
+  code: 'GATE-01',
+  xM: 18.4,
+  yM: 23.5,
+};
+const fallbackLayout: WarehouseLayout = {
+  canvas: { ...layoutCanvas, gridM: 1 },
+  zones: [],
+  racks: webStandardRacks,
+  shelves: [],
+  aisles: webStandardAisles.map((aisle, index) => ({
+    id: `aisle-${index + 1}`,
+    code: aisle.code,
+    type: aisle.isMain ? 'MAIN' : 'RACK',
+    xM: aisle.xM,
+    yM: aisle.yM,
+    widthM: aisle.widthM,
+    heightM: aisle.heightM,
+  })),
+  gates: [defaultGate],
+};
 
-export function WarehouseRouteMapModal({
-  visible,
-  onClose,
-  path,
-  targetLocation = 'RACK-02-T1-B1',
-  readOnly = false,
-  onSelectLocation,
-  onConfirmScanCell,
-}: WarehouseRouteMapModalProps) {
+export function WarehouseRouteMapModal({ visible, onClose, path, targetLocation = 'RACK-02-T1-B1', readOnly = false, onSelectLocation, onConfirmScanCell }: WarehouseRouteMapModalProps) {
   const [selectedRack, setSelectedRack] = useState<WarehouseLayoutRack | null>(null);
-  const [racks, setRacks] = useState<WarehouseLayoutRack[]>(webStandardRacks);
+  const [layout, setLayout] = useState<WarehouseLayout>(fallbackLayout);
   const [loading, setLoading] = useState(false);
   const [rackViewerOpen, setRackViewerOpen] = useState(false);
 
@@ -87,17 +244,17 @@ export function WarehouseRouteMapModal({
       fetchWarehouseLayout()
         .then((layout) => {
           if (layout && layout.racks && layout.racks.length > 0) {
-            setRacks(layout.racks);
+            setLayout(layout);
             const found = layout.racks.find((r) => targetLocation.includes(r.code)) || layout.racks.find((r) => r.code === 'RACK-02') || layout.racks[0];
             setSelectedRack(found);
           } else {
-            setRacks(webStandardRacks);
+            setLayout(fallbackLayout);
             const found = webStandardRacks.find((r) => r.code === 'RACK-02') || webStandardRacks[0];
             setSelectedRack(found);
           }
         })
         .catch(() => {
-          setRacks(webStandardRacks);
+          setLayout(fallbackLayout);
           setSelectedRack(webStandardRacks.find((r) => r.code === 'RACK-02') || webStandardRacks[0]);
         })
         .finally(() => setLoading(false));
@@ -106,15 +263,15 @@ export function WarehouseRouteMapModal({
 
   if (!visible) return null;
 
-  const points = path?.points || [
-    { xM: 18.4, yM: 23.5 },
-    { xM: 18.4, yM: 14.9 },
-    { xM: 26.8, yM: 14.9 },
-  ];
+  const racks = layout.racks;
+  const canvas = layout.canvas;
+  const gates = layout.gates.length > 0 ? layout.gates : [defaultGate];
+  const startGate = gates.find((gate) => gate.code === path?.startGateCode) ?? gates[0];
+  const points = path?.points || [{ xM: startGate.xM, yM: startGate.yM }, { xM: startGate.xM, yM: Math.max(0, startGate.yM - 8.6) }, selectedRack?.accessPoint ?? { xM: 26.8, yM: 14.9 }];
 
   const routePolylinePoints = points.map((p) => `${p.xM},${p.yM}`).join(' ');
   const distance = path?.distanceM ?? 25.3;
-  const gateCode = path?.startGateCode ?? defaultGate.code;
+  const gateCode = path?.startGateCode ?? startGate.code;
   const currentRackCode = selectedRack?.code || 'RACK-02';
 
   const handleRackPress = (rack: WarehouseLayoutRack) => {
@@ -133,9 +290,7 @@ export function WarehouseRouteMapModal({
           <View className="p-4 border-b border-[#e4e5e9] flex-row items-center justify-between bg-white">
             <View className="flex-1 mr-2">
               <Text className="text-base font-bold text-[#101114]">Bản đồ đường đi trong kho</Text>
-              <Text className="text-xs text-[#6c7078] mt-0.5">
-                Chọn rack để xem đường đi, sau đó bấm Xem mặt kệ.
-              </Text>
+              <Text className="text-xs text-[#6c7078] mt-0.5">Chọn rack để xem đường đi, sau đó bấm Xem mặt kệ.</Text>
             </View>
             <TouchableOpacity onPress={onClose} className="p-2 bg-[#f5f6f8] rounded-full">
               <X size={18} color={colors.textMuted} />
@@ -159,42 +314,35 @@ export function WarehouseRouteMapModal({
                 <Text className="text-xs text-[#64748b] mt-2">Đang tải sơ đồ kho từ máy chủ backend...</Text>
               </View>
             ) : (
-              <Svg
-                width="100%"
-                height="300"
-                viewBox={`-1 -1 ${layoutCanvas.widthM + 2} ${layoutCanvas.heightM + 2}`}
-              >
+              <Svg width="100%" height="300" viewBox={`-1 -1 ${canvas.widthM + 2} ${canvas.heightM + 2}`} preserveAspectRatio="xMidYMid meet">
+                <Defs>
+                  <Pattern id="operation-grid-mobile" width={canvas.gridM} height={canvas.gridM} patternUnits="userSpaceOnUse">
+                    <Path d={`M ${canvas.gridM} 0 L 0 0 0 ${canvas.gridM}`} fill="none" stroke="#cbd5e1" strokeWidth="0.025" />
+                  </Pattern>
+                </Defs>
                 {/* Outer Border */}
-                <Rect
-                  x="0"
-                  y="0"
-                  width={layoutCanvas.widthM}
-                  height={layoutCanvas.heightM}
-                  fill="#ffffff"
-                  stroke="#334155"
-                  strokeWidth="0.18"
-                />
+                <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="#ffffff" stroke="#334155" strokeWidth="0.18" />
+                <Rect x="0" y="0" width={canvas.widthM} height={canvas.heightM} fill="url(#operation-grid-mobile)" />
+
+                {layout.zones.map((zone) => (
+                  <Rect
+                    key={zone.id}
+                    x={zone.xM}
+                    y={zone.yM}
+                    width={zone.rotation === 90 ? zone.heightM : zone.widthM}
+                    height={zone.rotation === 90 ? zone.widthM : zone.heightM}
+                    fill="#f8fafc"
+                    stroke="#94a3b8"
+                    strokeDasharray="0.3 0.22"
+                    strokeWidth="0.06"
+                  />
+                ))}
 
                 {/* Aisles Corridors */}
-                {webStandardAisles.map((aisle) => (
+                {layout.aisles.map((aisle) => (
                   <G key={aisle.code}>
-                    <Rect
-                      x={aisle.xM}
-                      y={aisle.yM}
-                      width={aisle.widthM}
-                      height={aisle.heightM}
-                      fill={aisle.isMain ? '#dbe4e7' : '#eef2f3'}
-                      stroke="#cbd5e1"
-                      strokeWidth="0.04"
-                    />
-                    <SvgText
-                      x={aisle.xM + aisle.widthM / 2}
-                      y={aisle.yM + aisle.heightM / 2 + 0.15}
-                      fontSize="0.45"
-                      fontWeight="bold"
-                      fill="#64748b"
-                      textAnchor="middle"
-                    >
+                    <Rect x={aisle.xM} y={aisle.yM} width={aisle.widthM} height={aisle.heightM} fill={aisle.type === 'MAIN' ? '#dbe4e7' : '#eef2f3'} stroke="#cbd5e1" strokeWidth="0.04" />
+                    <SvgText x={aisle.xM + aisle.widthM / 2} y={aisle.yM + aisle.heightM / 2 + 0.15} fontSize="0.45" fontWeight="bold" fill="#64748b" textAnchor="middle">
                       {aisle.code}
                     </SvgText>
                   </G>
@@ -203,26 +351,20 @@ export function WarehouseRouteMapModal({
                 {/* Racks */}
                 {racks.map((rack) => {
                   const isTarget = currentRackCode === rack.code;
+                  const rect = getRackRect(rack);
                   return (
                     <G key={rack.id || rack.code} onPress={() => handleRackPress(rack)}>
                       <Rect
-                        x={rack.xM ?? 4}
-                        y={rack.yM ?? 4}
-                        width={rack.widthM ?? 5}
-                        height={rack.heightM ?? 2}
+                        x={rect.xM}
+                        y={rect.yM}
+                        width={rect.widthM}
+                        height={rect.heightM}
                         rx="0.2"
                         fill={isTarget ? '#f59e0b' : '#cbd5e1'}
                         stroke={isTarget ? '#b45309' : '#475569'}
                         strokeWidth={isTarget ? '0.3' : '0.1'}
                       />
-                      <SvgText
-                        x={(rack.xM ?? 4) + (rack.widthM ?? 5) / 2}
-                        y={(rack.yM ?? 4) + (rack.heightM ?? 2) / 2 + 0.25}
-                        fontSize="0.55"
-                        fontWeight="bold"
-                        fill={isTarget ? '#78350f' : '#1e293b'}
-                        textAnchor="middle"
-                      >
+                      <SvgText x={rect.xM + rect.widthM / 2} y={rect.yM + rect.heightM / 2 + 0.25} fontSize="0.55" fontWeight="bold" fill={isTarget ? '#78350f' : '#1e293b'} textAnchor="middle">
                         {rack.code}
                       </SvgText>
                     </G>
@@ -232,15 +374,7 @@ export function WarehouseRouteMapModal({
                 {/* Route Polyline Path */}
                 {routePolylinePoints ? (
                   <>
-                    <Polyline
-                      points={routePolylinePoints}
-                      fill="none"
-                      stroke="#2563eb"
-                      strokeWidth="0.45"
-                      strokeDasharray="0.6 0.3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <Polyline points={routePolylinePoints} fill="none" stroke="#2563eb" strokeWidth="0.45" strokeDasharray="0.6 0.3" strokeLinecap="round" strokeLinejoin="round" />
                     {points.map((pt, idx) => (
                       <Circle
                         key={idx}
@@ -255,54 +389,30 @@ export function WarehouseRouteMapModal({
                   </>
                 ) : null}
 
-                {/* Gate Marker */}
-                <G>
-                  <Circle
-                    cx={defaultGate.xM}
-                    cy={defaultGate.yM}
-                    r="0.55"
-                    fill="#0f766e"
-                    stroke="#ffffff"
-                    strokeWidth="0.1"
-                  />
-                  <SvgText
-                    x={defaultGate.xM}
-                    y={(defaultGate.yM ?? 23.5) - 0.8}
-                    fontSize="0.5"
-                    fontWeight="bold"
-                    fill="#0f766e"
-                    textAnchor="middle"
-                  >
-                    {gateCode}
-                  </SvgText>
-                </G>
+                {/* Gate Markers */}
+                {gates.map((gate) => (
+                  <G key={gate.id}>
+                    <Circle cx={gate.xM} cy={gate.yM} r="0.55" fill="#0f766e" stroke="#ffffff" strokeWidth="0.1" />
+                    <SvgText x={gate.xM} y={gate.yM - 0.8} fontSize="0.5" fontWeight="bold" fill="#0f766e" textAnchor="middle">
+                      {gate.code}
+                    </SvgText>
+                  </G>
+                ))}
               </Svg>
             )}
           </View>
 
           {/* Quick Horizontal Racks Selector */}
           <View className="px-3 py-2 bg-white border-t border-[#e4e5e9]">
-            <Text className="text-[10px] font-bold text-[#64748b] mb-1.5 uppercase">
-              Danh sách Kệ (Nhấn vào kệ trên bản đồ để chọn):
-            </Text>
+            <Text className="text-[10px] font-bold text-[#64748b] mb-1.5 uppercase">Danh sách Kệ (Nhấn vào kệ trên bản đồ để chọn):</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-1.5">
-              {racks.slice(0, 12).map((r) => (
+              {racks.map((r) => (
                 <TouchableOpacity
                   key={r.id || r.code}
                   onPress={() => handleRackPress(r)}
-                  className={`px-2.5 py-1 rounded-lg border mr-1 ${
-                    currentRackCode === r.code
-                      ? 'bg-[#fef3c7] border-[#d97706]'
-                      : 'bg-[#f8fafc] border-[#e2e8f0]'
-                  }`}
+                  className={`px-2.5 py-1 rounded-lg border mr-1 ${currentRackCode === r.code ? 'bg-[#fef3c7] border-[#d97706]' : 'bg-[#f8fafc] border-[#e2e8f0]'}`}
                 >
-                  <Text
-                    className={`text-xs font-bold ${
-                      currentRackCode === r.code ? 'text-[#b45309]' : 'text-[#334155]'
-                    }`}
-                  >
-                    {r.code}
-                  </Text>
+                  <Text className={`text-xs font-bold ${currentRackCode === r.code ? 'text-[#b45309]' : 'text-[#334155]'}`}>{r.code}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -314,13 +424,8 @@ export function WarehouseRouteMapModal({
               Đã chọn <Text className="font-extrabold text-[#0f172a]">{currentRackCode}</Text>. Kiểm tra đường đi rồi mở mặt kệ khi đã sẵn sàng.
             </Text>
 
-            <TouchableOpacity
-              onPress={handleOpenRackViewer}
-              className="bg-[#1d4ed8] py-3.5 px-4 rounded-xl flex-row items-center justify-center shadow-sm"
-            >
-              <Text className="text-xs font-extrabold text-white">
-                Xem mặt kệ {currentRackCode}
-              </Text>
+            <TouchableOpacity onPress={handleOpenRackViewer} className="bg-[#1d4ed8] py-3.5 px-4 rounded-xl flex-row items-center justify-center shadow-sm">
+              <Text className="text-xs font-extrabold text-white">Xem mặt kệ {currentRackCode}</Text>
             </TouchableOpacity>
           </View>
         </View>
