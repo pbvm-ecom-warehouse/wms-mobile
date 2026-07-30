@@ -29,6 +29,7 @@ import { listGoodsReceiptNotes } from '@/features/inbound/api/grn-api';
 import type { GoodsReceiptNote } from '@/features/inbound/types/grn';
 import { listPutawayTasks } from '@/features/putaway/api/putaway-api';
 import type { PutawayTask } from '@/features/putaway/types/putaway';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/shared/theme/tokens';
 import { QuickMenuModal, StatusBadge, Surface } from '@/shared/ui';
 import { CreateGrnModal } from './create-grn-modal';
@@ -92,12 +93,13 @@ export function ReceiverDailyDashboard() {
   });
 
   return (
-    <ScrollView
-      className="flex-1 bg-[#ececf1] p-4"
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={() => fetchData(true)} colors={[colors.primary]} />
-      }
-    >
+    <SafeAreaView edges={['top']} className="flex-1 bg-[#ececf1]">
+      <ScrollView
+        className="flex-1 p-4"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => fetchData(true)} colors={[colors.primary]} />
+        }
+      >
       {/* Top App Header with Left Menu ☰ & App Name */}
       <View className="flex-row items-center justify-between mb-4 pt-1">
         <TouchableOpacity
@@ -328,5 +330,6 @@ export function ReceiverDailyDashboard() {
         onClose={() => setShowQuickMenu(false)}
       />
     </ScrollView>
+    </SafeAreaView>
   );
 }

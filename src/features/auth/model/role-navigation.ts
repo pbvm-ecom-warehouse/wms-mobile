@@ -3,6 +3,7 @@ import { WmsRole } from '@/shared/types/auth';
 export type AppTab =
   | 'dashboard'
   | 'products'
+  | 'orders'
   | 'inbound'
   | 'outbound'
   | 'printing'
@@ -13,13 +14,13 @@ export type AppTab =
   | 'profile';
 
 const ROLE_TABS: Readonly<Record<WmsRole, readonly AppTab[]>> = {
-  [WmsRole.ADMIN]: ['dashboard', 'inbound', 'outbound', 'products', 'profile'],
-  [WmsRole.MANAGER]: ['dashboard', 'inbound', 'outbound', 'products', 'profile'],
+  [WmsRole.ADMIN]: ['dashboard', 'orders', 'inbound', 'outbound', 'profile'],
+  [WmsRole.MANAGER]: ['dashboard', 'orders', 'inbound', 'outbound', 'profile'],
   [WmsRole.RECEIVER]: ['dashboard', 'inbound', 'putaway', 'profile'],
-  [WmsRole.PICKER]: ['outbound', 'products', 'profile'],
-  [WmsRole.PRINTER]: ['printing', 'products', 'profile'],
-  [WmsRole.COUNTER]: ['inventory', 'products', 'profile'],
-  [WmsRole.SHIPPER]: ['shipping', 'profile'],
+  [WmsRole.PICKER]: ['dashboard', 'outbound', 'profile'],
+  [WmsRole.PRINTER]: ['dashboard', 'printing', 'profile'],
+  [WmsRole.COUNTER]: ['dashboard', 'inventory', 'profile'],
+  [WmsRole.SHIPPER]: ['dashboard', 'shipping', 'profile'],
 };
 
 export function getTabsForRole(role: WmsRole): readonly AppTab[] {
@@ -35,13 +36,13 @@ export function canAccessTab(role: WmsRole, tab: AppTab): boolean {
 }
 
 const ROLE_ALLOWED_ROUTES: Record<string, string[]> = {
-  ADMIN: ['dashboard', 'inbound', 'putaway', 'outbound', 'inventory', 'products', 'printing', 'shipping', 'scrap', 'profile'],
-  MANAGER: ['dashboard', 'inbound', 'putaway', 'outbound', 'inventory', 'products', 'printing', 'shipping', 'scrap', 'profile'],
+  ADMIN: ['dashboard', 'orders', 'inbound', 'putaway', 'outbound', 'inventory', 'products', 'printing', 'shipping', 'scrap', 'profile'],
+  MANAGER: ['dashboard', 'orders', 'inbound', 'putaway', 'outbound', 'inventory', 'products', 'printing', 'shipping', 'scrap', 'profile'],
   RECEIVER: ['dashboard', 'inbound', 'putaway', 'scrap', 'products', 'profile'],
-  PICKER: ['outbound', 'products', 'profile'],
-  PRINTER: ['printing', 'products', 'profile'],
-  COUNTER: ['inventory', 'products', 'scrap', 'profile'],
-  SHIPPER: ['shipping', 'profile'],
+  PICKER: ['dashboard', 'outbound', 'products', 'profile'],
+  PRINTER: ['dashboard', 'printing', 'products', 'profile'],
+  COUNTER: ['dashboard', 'inventory', 'products', 'scrap', 'profile'],
+  SHIPPER: ['dashboard', 'shipping', 'products', 'profile'],
 };
 
 export function canRoleAccessRoute(role?: string | WmsRole, routeKey?: string): boolean {

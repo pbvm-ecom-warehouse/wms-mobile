@@ -154,29 +154,35 @@ export function GrnDetailModal({ visible, grn, onClose, onUpdate, onDelete }: Gr
   if (!activeGrn) return null;
 
   const userRole = user?.role?.toUpperCase();
+  const isManager = userRole === WmsRole.MANAGER;
   const isDraftOrRejected = activeGrn.status === 'DRAFT' || activeGrn.status === 'REJECTED';
 
   const canSubmit =
+    !isManager &&
     isDraftOrRejected &&
-    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
+    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN);
 
   const canApproveOrReject =
+    !isManager &&
     activeGrn.status === 'PENDING_APPROVAL' &&
-    (userRole === WmsRole.MANAGER || userRole === WmsRole.ADMIN);
+    userRole === WmsRole.ADMIN;
 
   const canDelete =
+    !isManager &&
     isDraftOrRejected &&
     (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN);
 
   const hasImages = Boolean(activeGrn.images && activeGrn.images.length > 0);
 
   const canUploadImage =
+    !isManager &&
     isDraftOrRejected &&
-    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
+    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN);
 
   const canDeleteImage =
+    !isManager &&
     isDraftOrRejected &&
-    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN || userRole === WmsRole.MANAGER);
+    (userRole === WmsRole.RECEIVER || userRole === WmsRole.ADMIN);
 
   const handleDeleteImage = (index: number) => {
     const targetImage = activeGrn.images?.[index];

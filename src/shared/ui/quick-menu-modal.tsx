@@ -10,6 +10,7 @@ import {
   LogOut,
   Menu,
   Printer,
+  ShoppingCart,
   Trash2,
   Truck,
   UserRound,
@@ -26,6 +27,15 @@ interface QuickMenuModalProps {
 }
 
 const mainNavItems = [
+  {
+    key: 'orders',
+    title: 'Đơn Đặt Hàng',
+    subtitle: 'Đặt mua Nhà cung cấp',
+    icon: ShoppingCart,
+    color: '#2563eb',
+    bgColor: '#dbeafe',
+    route: '/orders',
+  },
   {
     key: 'inbound',
     title: 'Phiếu Nhập',

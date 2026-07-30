@@ -60,26 +60,33 @@ export async function listPutawayTasks(input: QueryPutawayTasksInput = {}, force
     return putawayTasksCache.data;
   }
 
-  const response = await apiClient.get<ApiListLike<PutawayTask> | PutawayTask[]>('/putaway-tasks', {
-    params: {
-      limit: input.limit,
-      page: input.page,
-      status: input.status && input.status !== 'ALL' ? input.status : undefined,
-      grnId: input.grnId,
-    },
-  });
-  const unwrapped = unwrapData<ApiListLike<PutawayTask> | PutawayTask[]>(response.data);
-  let result: PutawayTask[] = [];
-  if (Array.isArray(unwrapped)) {
-    result = unwrapped;
-  } else if (unwrapped && Array.isArray((unwrapped as ApiListLike<PutawayTask>).data)) {
-    result = (unwrapped as ApiListLike<PutawayTask>).data!;
-  } else if (unwrapped && Array.isArray((unwrapped as ApiListLike<PutawayTask>).items)) {
-    result = (unwrapped as ApiListLike<PutawayTask>).items!;
-  }
+  try {
+    const response = await apiClient.get<ApiListLike<PutawayTask> | PutawayTask[]>('/putaway-tasks', {
+      params: {
+        limit: input.limit,
+        page: input.page,
+        status: input.status && input.status !== 'ALL' ? input.status : undefined,
+        grnId: input.grnId,
+      },
+    });
+    const unwrapped = unwrapData<ApiListLike<PutawayTask> | PutawayTask[]>(response.data);
+    let result: PutawayTask[] = [];
+    if (Array.isArray(unwrapped)) {
+      result = unwrapped;
+    } else if (unwrapped && Array.isArray((unwrapped as ApiListLike<PutawayTask>).data)) {
+      result = (unwrapped as ApiListLike<PutawayTask>).data!;
+    } else if (unwrapped && Array.isArray((unwrapped as ApiListLike<PutawayTask>).items)) {
+      result = (unwrapped as ApiListLike<PutawayTask>).items!;
+    }
 
-  putawayTasksCache = { data: result, timestamp: Date.now(), key: cacheKey };
-  return result;
+    putawayTasksCache = { data: result, timestamp: Date.now(), key: cacheKey };
+    return result;
+  } catch (err: any) {
+    if (err?.response?.status === 403 || err?.status === 403) {
+      return [];
+    }
+    throw err;
+  }
 }
 
 export async function getPutawayTask(id: string): Promise<PutawayTask> {

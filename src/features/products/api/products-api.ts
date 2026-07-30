@@ -150,8 +150,10 @@ export async function linkPutawayStockToItems(items: WarehouseItem[]): Promise<W
       }
       return item;
     });
-  } catch (err) {
-    console.warn('Lỗi tự động nối dữ liệu Cất hàng vào Sản phẩm:', err);
+  } catch (err: any) {
+    if (err?.response?.status !== 403 && err?.status !== 403) {
+      console.warn('Lỗi tự động nối dữ liệu Cất hàng vào Sản phẩm:', err);
+    }
     return items;
   }
 }

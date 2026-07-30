@@ -7,6 +7,7 @@ import {
   Layers,
   LayoutDashboard,
   Printer,
+  ShoppingCart,
   Trash2,
   Truck,
   UserRound,
@@ -22,6 +23,7 @@ const screens: {
   icon: React.ComponentType<any>;
 }[] = [
   { name: 'dashboard', title: 'Tổng quan', icon: LayoutDashboard },
+  { name: 'orders', title: 'Đặt hàng', icon: ShoppingCart },
   { name: 'products', title: 'Sản phẩm', icon: Box },
   { name: 'inbound', title: 'Nhập kho', icon: ArrowDownLeft },
   { name: 'putaway', title: 'Cất hàng', icon: Layers },
@@ -63,13 +65,16 @@ export default function TabsLayout() {
         const isAccessible = canAccessTab(user?.role || ('' as any), screen.name);
         const IconComponent = screen.icon;
 
+        // Always hide 'products' tab from bottom taskbar (accessed via sidebar only)
+        const isHiddenFromTabBar = screen.name === 'products' || !isAccessible;
+
         return (
           <Tabs.Screen
             key={screen.name}
             name={screen.name}
             options={{
               title: screen.title,
-              href: isAccessible ? undefined : null,
+              href: isHiddenFromTabBar ? null : undefined,
               tabBarIcon: ({ color, size }) => (
                 <IconComponent size={size || 20} color={color} />
               ),

@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '@/features/auth/context/auth-context';
 import {
-  canAccessTab,
+  canRoleAccessRoute,
   getDefaultRouteForRole,
   type AppTab,
 } from '@/features/auth/model/role-navigation';
@@ -18,7 +18,7 @@ export function ProtectedTab({
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
-  const isAllowed = user ? canAccessTab(user.role, tab) : false;
+  const isAllowed = user ? canRoleAccessRoute(user.role, tab) : false;
 
   useEffect(() => {
     if (!isLoading) {
